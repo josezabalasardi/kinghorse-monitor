@@ -396,7 +396,7 @@ const send = (res, code, body, type = 'application/json') => { res.writeHead(cod
 if (BACKFILL) { descargarHistorial(BACKFILL).then(() => { console.log('Historial listo'); process.exit(0); }); return; }
 const ABIERTO = process.env.MONITOR_ABIERTO === '1'; // solo para pruebas locales
 if (!acceso.hayUsuarios() && !ABIERTO && !BACKFILL) { console.error('No hay usuarios. Crea uno con: node server.js --usuario <usuario> <clave> [nombre]'); process.exit(1); }
-const PUBLICAS = new Set(['/login', '/login.html', '/api/login', '/manifest.json', '/icon.svg', '/logo.png', '/icon-192.png', '/icon-512.png']);
+const PUBLICAS = new Set(['/login', '/login.html', '/api/login', '/manifest.json', '/icon.svg', '/logo.png', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/favicon.png', '/favicon.ico']);
 const ipDe = req => { const ip = req.socket.remoteAddress || ''; return (/^(::ffff:)?127\.0\.0\.1$|^::1$/.test(ip) && req.headers['x-forwarded-for']) ? req.headers['x-forwarded-for'].split(',')[0].trim() : ip; };
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
@@ -485,7 +485,7 @@ http.createServer(async (req, res) => {
       return send(res, 200, { ok: true });
     }
     const f = path.join(__dirname, 'public', u.pathname === '/' ? 'index.html' : path.normalize(u.pathname).replace(/^(\.\.[\/\\])+/, ''));
-    if (f.startsWith(path.join(__dirname, 'public')) && fs.existsSync(f)) return send(res, 200, fs.readFileSync(f), ({ '.html': 'text/html; charset=utf-8', '.json': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png' })[path.extname(f)] || 'text/plain');
+    if (f.startsWith(path.join(__dirname, 'public')) && fs.existsSync(f)) return send(res, 200, fs.readFileSync(f), ({ '.html': 'text/html; charset=utf-8', '.json': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' })[path.extname(f)] || 'text/plain');
     send(res, 404, { error: 'no existe' });
   } catch (e) { send(res, 500, { error: e.message }); }
 }).listen(PORT, process.env.HOST || '0.0.0.0', () => console.log(`Monitor en http://${process.env.HOST || 'localhost'}:${PORT} · ${FIXED_DATE ? 'repitiendo ' + FIXED_DATE : 'en vivo'}`));
