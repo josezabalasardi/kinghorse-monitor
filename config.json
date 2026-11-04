@@ -1,0 +1,56 @@
+{
+  "hipodromo": "RINCONADA",
+  "refresco": {
+    "ticketsNuevosSeg": 5,
+    "ticketsCompletoSeg": 60,
+    "calendarioSeg": 60
+  },
+  "alertas": {
+    "ventaTardia": {
+      "activa": true,
+      "leveSeg": 0,
+      "mediaSeg": 60,
+      "graveSeg": 120
+    },
+    "ticketGrande": {
+      "activa": true,
+      "porTaquilla": true,
+      "percentil": 99,
+      "vecesAlta": 3,
+      "minTickets": 30,
+      "pisoBS": 10000,
+      "pisoUSD": 50,
+      "BS": 100000,
+      "USD": 1000,
+      "manual": {}
+    },
+    "ticketAtipicoTaquilla": {
+      "activa": true,
+      "vecesMediana": 15,
+      "minimoBS": 30000,
+      "minimoUSD": 300
+    },
+    "taquillaEnPerdida": {
+      "activa": true,
+      "BS": -100000,
+      "USD": -500
+    },
+    "anulaciones": {
+      "activa": true,
+      "cantidad": 5,
+      "porcentajeVenta": 10
+    },
+    "cargaEnCaballo": {
+      "activa": true,
+      "porcentaje": 50,
+      "minimoBS": 500000,
+      "minimoUSD": 5000
+    }
+  },
+  "telegram": {
+    "niveles": [
+      "alta"
+    ]
+  },
+  "reglas": []
+}

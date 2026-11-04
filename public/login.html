@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#13244A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="logo.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Monitor King Horse</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+<style>
+:root{--navy:#13244A;--bg:#EEF1F6;--panel:#FFFFFF;--line:#D9DFEA;--text:#13244A;--muted:#5D6B84;--alta:#C2362B;--gold:#A47B26}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:16px/1.45 Archivo,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.band{background:var(--navy);padding:calc(36px + env(safe-area-inset-top,0px)) 16px 28px;text-align:center}
+.band img{width:120px;height:auto;display:block;margin:0 auto}
+main{max-width:380px;margin:0 auto;padding:24px 16px 32px}
+h1{font:800 26px/1.15 Archivo;font-stretch:78%;margin:0 0 4px}
+p{color:var(--muted);margin:0 0 20px;font-size:15px}
+label{display:block;color:var(--muted);font-size:13px;font-weight:600;margin:14px 0 6px}
+input{width:100%;font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 14px}
+input:focus{outline:2px solid var(--gold);outline-offset:1px}
+button{width:100%;margin-top:22px;font:inherit;font-weight:700;color:#fff;background:var(--navy);border:0;border-radius:12px;padding:14px;cursor:pointer}
+button:disabled{opacity:.6}
+.err{color:var(--alta);font-size:14px;min-height:20px;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="band"><img src="logo.png" alt="King Horse"></div>
+<main>
+  <h1>Monitor King Horse</h1>
+  <p>Entra con tu usuario de gerente o supervisor.</p>
+  <form id="f">
+    <label for="u">Usuario</label>
+    <input id="u" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+    <label for="c">Clave</label>
+    <input id="c" type="password" autocomplete="current-password" required>
+    <button id="b">Entrar</button>
+    <div class="err" id="e" role="alert"></div>
+  </form>
+</main>
+<script>
+document.getElementById('f').onsubmit = async ev => {
+  ev.preventDefault();
+  const b = document.getElementById('b'), e = document.getElementById('e');
+  b.disabled = true; e.textContent = '';
+  try {
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario: document.getElementById('u').value, clave: document.getElementById('c').value }) });
+    if (r.ok) { location.href = '/'; return; }
+    e.textContent = (await r.json()).error || 'No se pudo entrar';
+  } catch { e.textContent = 'Sin conexión con el monitor'; }
+  b.disabled = false;
+};
+</script>
+</body>
+</html>

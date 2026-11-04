@@ -1,0 +1,9 @@
+node_modules/
+usuarios.json
+.secreto
+historial/
+cierres/
+sectores.json
+*.log
+*.bak
+.env

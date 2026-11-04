@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#13244A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Monitor KH">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="logo.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Monitor King Horse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+<style>
+/* Pista de día: claro para leer al sol, banda marina con el escudo arriba, números en Archivo condensado */
+:root{
+  --navy:#13244A; --navy2:#1E3563; --gold:#A47B26; --gold2:#E3C47C;
+  --bg:#EEF1F6; --panel:#FFFFFF; --panel2:#F3F5F9; --line:#D9DFEA; --text:#13244A; --muted:#5D6B84;
+  --bs:#8A6A1F; --usd:#2F5FB0; --pos:#1E7A4F; --alta:#C2362B; --media:#C77A12; --baja:#7A8599; --accent:#13244A;
+  --altabg:#FFF4F2; --altaline:#F2C9C3;
+  --num:"Archivo",system-ui,sans-serif;
+  --tabh:62px; --safeb:env(safe-area-inset-bottom,0px); --safet:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 "Archivo",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums}
+button,select,input{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+button{cursor:pointer;font-weight:600}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;background:var(--navy);color:#fff;padding:calc(10px + var(--safet)) 16px 10px}
+.brand img{width:38px;height:auto;flex:none}
+.brand .tt{flex:1;min-width:0}
+.brand h1{font:800 18px/1.15 var(--num);font-stretch:80%;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand #estado{font-size:12px;color:#B9C4DA}
+.dot{flex:none;font:800 12px var(--num);font-stretch:85%;padding:4px 10px;border-radius:99px;background:#2A3D66;color:#B9C4DA}
+.dot::after{content:"REPETICIÓN"}
+.dot.live{background:#22C07A;color:#06321D}.dot.live::after{content:"EN VIVO"}
+.dot.err{background:var(--alta);color:#fff}.dot.err::after{content:"SIN CONEXIÓN"}
+.sub{color:var(--muted);font-size:12px}
+.topin{padding:8px 16px 10px}
+.replay{display:flex;align-items:center;gap:8px;margin-top:8px}
+.replay input[type=range]{flex:1;min-width:0;accent-color:var(--navy)}
+.replay button{padding:6px 12px}
+.replay select{padding:6px 8px}
+main{padding:12px 16px calc(var(--tabh) + var(--safeb) + 16px);max-width:760px;margin:0 auto}
+.view{display:none}.view.on{display:block}
+h2{font:800 17px/1.2 var(--num);font-stretch:80%;color:var(--navy);margin:22px 0 8px}
+h2:first-child{margin-top:4px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.cur .hd{display:flex;justify-content:space-between;align-items:baseline}
+.cur .tag{font:800 13px var(--num);font-stretch:70%;color:var(--gold)}
+.big{font:800 30px/1.05 var(--num);font-stretch:68%;margin:4px 0;letter-spacing:-.2px}
+.gan{font:700 18px var(--num);font-stretch:75%;margin-top:8px}
+.gan small{font-size:13px;font-weight:600;color:var(--muted);margin-left:3px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.l{color:var(--muted);font-size:12px}.v{font:700 17px var(--num);font-stretch:78%}
+.neg{color:var(--alta)!important}.pos{color:var(--pos)}
+.bs{color:var(--bs)}.usd{color:var(--usd)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.two .card{margin:0;min-width:0}
+.two.wide{grid-template-columns:1fr}
+@media (min-width:640px){.two.wide{grid-template-columns:1fr 1fr}}
+.strip{display:flex;gap:6px;overflow-x:auto;margin:0 -16px 12px;padding:0 16px 2px;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.strip button{flex:none;padding:6px 10px;border-radius:8px;font:600 13px var(--num);font-stretch:75%;color:var(--muted)}
+.strip button.done{opacity:.6}
+.strip button.now{background:var(--navy);color:#fff;border-color:var(--navy)}
+.sect{display:flex;gap:12px;align-items:center}
+.sect .sw{width:7px;align-self:stretch;border-radius:3px}
+.sect .nm{font-weight:700}
+.sect .cols{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;flex:1;font-size:13px}
+.badge{display:inline-block;min-width:20px;text-align:center;background:var(--alta);color:#fff;border-radius:99px;padding:0 6px;font-size:11px;font-weight:700}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border-radius:99px;padding:7px 12px;font-size:13px;background:var(--panel);border:1px solid var(--line);white-space:nowrap}
+.chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.chip small{opacity:.75;margin-left:4px}
+.chip .rd{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--alta);margin-left:5px;vertical-align:1px}
+.racehd{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin:4px 0 10px}
+.racehd b{font:800 22px var(--num);font-stretch:75%}
+.horse{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
+.horse .n{font:800 22px var(--num);font-stretch:75%;text-align:center;background:var(--navy);color:#fff;border-radius:10px;padding:8px 0}
+.horse .amts{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
+.horse .amt{font:700 17px var(--num);font-stretch:78%}
+.horse .pc{color:var(--muted);font-size:12px;margin-left:4px}
+.bar{height:5px;background:var(--panel2);border-radius:3px;overflow:hidden;margin-top:3px}
+.bar i{display:block;height:100%}
+.sbar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:8px;background:var(--panel2)}
+.sbar i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--muted);margin:4px 0 12px}
+.legend span::before{content:"";display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;background:var(--c)}
+.hot{border-color:var(--alta);box-shadow:0 0 0 1px var(--alta)}
+.al{border-left:4px solid}.al.alta{border-left-color:var(--alta);background:var(--altabg);border-color:var(--altaline);border-left-color:var(--alta)}.al.media{border-left-color:var(--media)}.al.baja{border-left-color:var(--baja)}
+.al .t{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.al.alta .t>span:first-child{color:var(--alta)}
+.al .h{color:var(--muted);font-weight:400;font-size:12px;white-space:nowrap}
+.al .d{color:var(--muted);font-size:13px;margin-top:2px}
+.tq{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.tq .nm{font-weight:700}
+.tq .r{text-align:right}
+.search{width:100%;margin-bottom:8px}
+.empty{color:var(--muted);text-align:center;padding:30px 0}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);background:#FFFFFFEE;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding-bottom:var(--safeb)}
+nav button{background:none;border:0;border-radius:0;height:var(--tabh);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);font-size:11.5px;position:relative}
+nav button svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.9}
+nav button.on{color:var(--navy)}
+nav button.on::before{content:"";position:absolute;top:0;left:30%;right:30%;height:3px;border-radius:0 0 3px 3px;background:var(--gold)}
+nav .badge{position:absolute;top:7px;left:calc(50% + 6px)}
+.sheet{position:fixed;inset:0;z-index:40;display:none}
+.sheet.on{display:block}
+.sheet .bk{position:absolute;inset:0;background:#13244A99}
+.sheet .pn{position:absolute;left:0;right:0;bottom:0;max-height:88vh;overflow:auto;background:var(--bg);border-radius:18px 18px 0 0;padding:8px 16px calc(20px + var(--safeb));max-width:760px;margin:0 auto;animation:up .2s ease-out}
+@keyframes up{from{transform:translateY(40px);opacity:.4}}
+@media (prefers-reduced-motion:reduce){.sheet .pn,.toast.on{animation:none}}
+.sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:4px auto 10px}
+.sheet .ttl{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.sheet .ttl b{font:800 20px var(--num);font-stretch:78%}
+.seg{display:inline-flex;background:#DCE2EC;border-radius:10px;padding:3px;gap:3px}
+.seg button{border:0;padding:7px 14px;border-radius:8px;background:none;color:var(--muted)}
+.seg button.on{background:var(--panel);color:var(--navy);box-shadow:0 1px 2px #13244A22}
+.li{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.li:last-child{border-bottom:0}
+.li .s{color:var(--muted);font-size:12px}
+.centro{display:flex}.centro .seg{flex:1;display:flex}.centro .seg button{flex:1}
+.cmp{width:100%;border-collapse:collapse;font-size:13px}.cmp th,.cmp td{padding:6px 4px;text-align:right;border-bottom:1px solid var(--line)}.cmp th:first-child,.cmp td:first-child{text-align:left}.cmp th{color:var(--muted);font-weight:500;font-size:11px}
+.hrow{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);align-items:start}.hrow>span:not(:first-child){text-align:right}.hrow .s{color:var(--muted);font-size:11px}
+.toast{position:fixed;left:12px;right:12px;top:calc(10px + var(--safet));z-index:50;background:var(--altabg);color:var(--text);border:1px solid var(--alta);border-radius:12px;padding:10px 14px;display:none;max-width:736px;margin:0 auto;box-shadow:0 6px 20px #13244A33}
+.toast.on{display:block;animation:up .2s}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand"><img src="logo.png" alt="King Horse"><div class="tt"><h1 id="ttl">La Rinconada</h1><span id="estado">cargando…</span></div><span class="dot" id="dot"></span></div>
+  <div class="topin">
+  <div class="centro"><div class="seg" id="centroSel"></div></div>
+  <div class="replay" id="replay" hidden>
+    <button id="play">▶</button>
+    <input type="range" id="slider">
+    <select id="speed"><option value="30">×30</option><option value="60" selected>×60</option><option value="180">×180</option></select>
+  </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<main>
+  <div class="view on" id="v-resumen"></div>
+  <div class="view" id="v-carreras"></div>
+  <div class="view" id="v-alertas"></div>
+  <div class="view" id="v-taquillas"></div>
+</main>
+
+<nav id="nav">
+  <button data-v="resumen" class="on"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Resumen</button>
+  <button data-v="carreras"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Carreras</button>
+  <button data-v="alertas"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg>Alertas<span class="badge" id="navBadge" hidden>0</span></button>
+  <button data-v="taquillas"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>Taquillas</button>
+</nav>
+
+<div class="sheet" id="sheet"><div class="bk" onclick="closeSheet()"></div><div class="pn"><div class="grab"></div><div id="sheetBody"></div></div></div>
+
+<script>
+// sesión: si el servidor responde 401 se vuelve al login
+const _fetch = window.fetch;
+window.fetch = async (...a) => { const r = await _fetch(...a); if (r.status === 401) location.href = '/login.html'; return r; };
+let YO = null;
+_fetch('/api/yo').then(r => r.ok ? r.json() : null).then(j => { YO = j; if (j?.nombre) try { localStorage.setItem('quien', j.nombre); } catch {} }).catch(() => {});
+async function salir(){ if (!confirm('¿Cerrar sesión?')) return; await _fetch('/api/salir'); location.href = '/login.html'; }
+const $ = s => document.querySelector(s);
+const SC = {'Sportbook':'#D4A21E','Tribuna A':'#2F6FD0','Tribuna B':'#23935F','Tribuna C':'#7B4CCB','Jockey Club':'#D2552F','The Book':'#13958F','Otros':'#7A8599'};
+const fmt = n => Math.round(n||0).toLocaleString('es-VE');
+const short = n => { n = n||0; const a = Math.abs(n); return a >= 1e6 ? (n/1e6).toFixed(a>=1e7?1:2).replace('.',',')+' M' : a >= 1e4 ? Math.round(n/1e3)+' mil' : fmt(n); };
+const hhmm = (ms, s) => new Date(ms).toLocaleTimeString('es-VE',{hour:'2-digit',minute:'2-digit',...(s?{second:'2-digit'}:{}),timeZone:'America/Caracas'});
+const ng = n => n < 0 ? 'neg' : '';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let centro = 'Ambos'; try { centro = localStorage.getItem('centro') || 'Ambos'; } catch {}
+const CENTROS = ['Hipódromo','The Book','Ambos'];
+const centroDe = s => s === 'The Book' ? 'The Book' : s === 'Otros' ? 'Otros' : 'Hipódromo';
+const inC = s => centro === 'Ambos' || centroDe(s) === centro;
+const blank = () => ({ventas:0,premios:0,tickets:0,anulado:0,anulados:0});
+const addTo = (o, v) => { for (const k in o) o[k] += v[k] || 0; return o; };
+function sumSect(porSector, filt = inC){ const r = {BS:blank(), USD:blank()}; for (const [s,v] of Object.entries(porSector||{})) if (filt(s)) { addTo(r.BS, v.BS); addTo(r.USD, v.USD); } return r; }
+function setCentro(c){ centro = c; try { localStorage.setItem('centro', c); } catch {} render(); }
+let D = null, view = 'resumen', race = null, fAl = 'Todas', fNivel = 'todas', fSect = 'Todos', q = '', hasta = null, playing = false, seen = null, sheetFn = null;
+
+async function load(){
+  try { D = await (await fetch('/api/estado' + (hasta ? '?hasta=' + hasta : ''))).json(); render(); notify(); }
+  catch(e){ $('#dot').className = 'dot err'; $('#estado').textContent = 'sin conexión'; }
+}
+function render(){
+  const live = D.modo === 'vivo';
+  $('#dot').className = 'dot ' + (D.error ? 'err' : live ? 'live' : '');
+  const dia = new Date(D.fecha + 'T12:00').toLocaleDateString('es-VE', {weekday:'long', day:'numeric', month:'long'});
+  $('#estado').textContent = D.error ? 'Error de conexión con ondrv' : live ? `${dia} · actualizado ${hhmm(D.actualizado, true)}` : `${dia} · ${hhmm(D.ahora)}`;
+  if (!live && D.rango){ $('#replay').hidden = false; const s = $('#slider'); if (+s.max !== D.rango[1]) { s.min = D.rango[0] - 60000; s.max = D.rango[1]; s.step = 1000; if (!hasta) s.value = s.max; } }
+  $('#centroSel').innerHTML = CENTROS.map(c=>`<button class="${c===centro?'on':''}" onclick="setCentro('${c}')">${c}</button>`).join('');
+  $('#ttl').textContent = centro === 'Ambos' ? 'La Rinconada' : centro === 'The Book' ? 'The Book' : 'La Rinconada · Hipódromo';
+  const altas = alertasC().filter(a => a.nivel === 'alta').length;
+  $('#navBadge').hidden = !altas; $('#navBadge').textContent = altas > 99 ? '99+' : altas;
+  ({resumen:rResumen, carreras:rCarreras, alertas:rAlertas, taquillas:rTaquillas})[view]();
+  if (view === 'resumen') { const st = $('#v-resumen .strip'), n = st && st.querySelector('.now'); if (n && st.dataset.k !== n.textContent) { st.scrollLeft = n.offsetLeft - 16; } }
+  if (sheetFn) sheetFn();
+}
+function notify(){
+  const ids = new Set(D.alertas.filter(a=>a.nivel==='alta').map(a => a.tipo+a.ticket+a.uid+a.carrera));
+  if (seen && D.modo === 'vivo' || seen && playing) {
+    const nuevas = alertasC().filter(a => a.nivel==='alta' && !seen.has(a.tipo+a.ticket+a.uid+a.carrera));
+    if (nuevas.length){ const a = nuevas[0];
+      $('#toast').innerHTML = `<b>${esc(a.tipo)}${a.carrera?' · C'+a.carrera:''}</b><div class="sub" style="color:var(--alta)">${esc(a.taquilla||'')} · ${esc(a.detalle)}</div>${nuevas.length>1?`<div class="sub">y ${nuevas.length-1} más</div>`:''}`;
+      $('#toast').className = 'toast on'; clearTimeout(window._tt); window._tt = setTimeout(()=>$('#toast').className='toast', 6000);
+      if (navigator.vibrate) navigator.vibrate([120,60,120]);
+    }
+  }
+  seen = ids;
+}
+$('#toast').onclick = () => { $('#toast').className='toast'; go('alertas'); };
+
+// ---------- Resumen ----------
+function rResumen(){
+  const T = centro === 'Ambos' ? D.totales : sumSect(D.sectores);
+  const cur = c => { const t = T[c], g = t.ventas - t.premios;
+    return `<div class="card cur ${c}"><div class="tag">${c === 'BS' ? 'Bolívares' : 'Dólares'}</div>
+      <div class="big">${short(t.ventas)}</div>
+      <div class="sub">vendido · ${fmt(t.tickets)} tickets</div><div class="sub">premios ${short(t.premios)}</div>
+      <div class="gan ${g < 0 ? 'neg' : 'pos'}">${g > 0 ? '+' : ''}${short(g)}<small>${t.ventas ? Math.round(g / t.ventas * 100) : 0} %</small></div>
+      ${t.anulados ? `<div class="sub" style="margin-top:4px">anulado ${short(t.anulado)} (${t.anulados})</div>` : ''}</div>`; };
+  const cs = [...D.carreras].sort((a,b)=>a.carrera-b.carrera), ahora = cs.find(c => !c.cerrada) || cs[cs.length-1];
+  const strip = cs.length ? `<div class="strip">${cs.map(c => `<button class="${c === ahora ? 'now' : c.cerrada ? 'done' : ''}" onclick="race=${c.carrera};go('carreras')">C${c.carrera} ${c.postTime}</button>`).join('')}</div>` : '';
+  const alS = {}; alertasC().forEach(a => { if (a.nivel==='alta') alS[a.sector] = (alS[a.sector]||0)+1; });
+  const secs = Object.entries(D.sectores).filter(([s]) => inC(s)).filter(([,v]) => v.BS.tickets+v.USD.tickets+v.BS.anulados+v.USD.anulados);
+  const top = alertasC().filter(a => a.nivel==='alta').slice(0,3);
+  let cmp = '';
+  if (centro === 'Ambos') {
+    const H = sumSect(D.sectores, s => centroDe(s)==='Hipódromo'), B = sumSect(D.sectores, s => s==='The Book');
+    const row = (n, x, c) => { const g = x[c].ventas - x[c].premios; return `<tr><td>${n}</td><td class="${c.toLowerCase()}">${short(x[c].ventas)}</td><td class="${ng(g)}">${short(g)}</td><td class="${ng(g)}">${x[c].ventas?Math.round(g/x[c].ventas*100):0} %</td><td>${fmt(x[c].tickets)}</td></tr>`; };
+    const tbl = c => `<div class="card cur ${c}"><span class="tag">${c}</span><table class="cmp" style="margin-top:6px"><tr><th>Centro</th><th>Ventas</th><th>Ganancia</th><th>Margen</th><th>Tickets</th></tr>${row('Hipódromo',H,c)}${row('The Book',B,c)}</table>
+      <div class="sbar" style="margin-top:10px"><i style="width:${(H[c].ventas/((H[c].ventas+B[c].ventas)||1))*100}%;background:var(--accent)"></i><i style="flex:1;background:${SC['The Book']}"></i></div>
+      <div class="sub" style="margin-top:4px">Hipódromo ${Math.round(H[c].ventas/((H[c].ventas+B[c].ventas)||1)*100)} % · The Book ${Math.round(B[c].ventas/((H[c].ventas+B[c].ventas)||1)*100)} % de la venta</div></div>`;
+    cmp = `<h2>Hipódromo contra The Book</h2><div class="two wide">${tbl('BS')}${tbl('USD')}</div>`;
+  }
+  $('#v-resumen').innerHTML = `${strip}<div class="two">${['BS','USD'].filter(c => centro==='Ambos' || T[c].tickets || T[c].anulados).map(cur).join('') || '<div class="empty">Sin ventas todavía.</div>'}</div>${cmp}
+    <h2>Por sector</h2>${secs.map(([s,v]) => { const gb=v.BS.ventas-v.BS.premios, gu=v.USD.ventas-v.USD.premios;
+      return `<div class="card sect" onclick="fSect='${s}';go('taquillas')"><div class="sw" style="background:${SC[s]}"></div>
+      <div style="flex:1"><div style="display:flex;justify-content:space-between"><span class="nm">${s}</span>${alS[s]?`<span class="badge">${alS[s]}</span>`:''}</div>
+      <div class="cols" style="margin-top:4px"><div><span class="l">Venta BS</span><br><b class="bs">${short(v.BS.ventas)}</b></div><div><span class="l">Venta USD</span><br><b class="usd">${short(v.USD.ventas)}</b></div>
+      <div><span class="l">Ganancia BS</span><br><b class="${ng(gb)}">${short(gb)}</b></div><div><span class="l">Ganancia USD</span><br><b class="${ng(gu)}">${short(gu)}</b></div></div></div></div>`; }).join('') || '<div class="empty">Sin ventas todavía.</div>'}
+    ${top.length?`<h2>Últimas alertas altas</h2>${top.map(alCard).join('')}<button style="width:100%" onclick="go('alertas')">Ver todas las alertas</button>`:''}`;
+}
+
+// ---------- Carreras ----------
+function rCarreras(){
+  const cs = [...D.carreras].sort((a,b)=>a.carrera-b.carrera);
+  if (!cs.length){ $('#v-carreras').innerHTML = '<div class="empty">No hay carreras de La Rinconada hoy.</div>'; return; }
+  if (race == null || !cs.find(c=>c.carrera===race)){ const nx = cs.find(c=>c.minutos >= -2); race = (nx || cs[cs.length-1]).carrera; }
+  const c = cs.find(x=>x.carrera===race), R0 = D.races[race];
+  let R = null;
+  if (R0) { R = {...R0, BS:blank(), USD:blank(), caballos:{}};
+    for (const [k,x] of Object.entries(R0.caballos)) { const t = sumSect(x.porSector); if (!t.BS.tickets && !t.USD.tickets && !t.BS.anulados && !t.USD.anulados) continue;
+      R.caballos[k] = {...x, BS:t.BS, USD:t.USD, porSector:Object.fromEntries(Object.entries(x.porSector).filter(([s])=>inC(s)))}; addTo(R.BS,t.BS); addTo(R.USD,t.USD); }
+    R.tardias = alertasC().filter(a=>a.tipo==='Venta tardía'&&a.carrera===race).length;
+    if (!Object.keys(R.caballos).length) R = null; }
+  const lbl = c => c.cerrada ? (c.closeMs ? `cerró a +${Math.round((c.closeMs-c.postMs)/1000)} s` : 'cerrada') : c.minutos > 0 ? `en ${c.minutos} min` : `abierta, ${-c.minutos} min pasada la hora`;
+  let h = `<div class="chips" id="raceChips">${cs.map(x=>`<button class="chip ${x.carrera===race?'on':''}" onclick="race=${x.carrera};rCarreras()">C${x.carrera}<small>${x.postTime}</small>${D.races[x.carrera]?.tardias?'<span class="rd"></span>':''}</button>`).join('')}</div>`;
+  h += `<div class="racehd"><div><b style="font-size:18px">Carrera ${race}</b> <span class="sub">${c.postTime} · ${lbl(c)}</span></div>${R?.tardias?`<span class="badge" onclick="fAl='Venta tardía';go('alertas')">${R.tardias} tardías</span>`:''}</div>`;
+  if (!R){ $('#v-carreras').innerHTML = h + '<div class="empty">Sin jugadas todavía.</div>'; keepChip(); return; }
+  h += `<div class="two">${['BS','USD'].filter(k => R[k].tickets || R[k].anulados).map(k => `<div class="card cur ${k}"><span class="tag">${k}</span> <b>${fmt(R[k].ventas)}</b> <span class="sub">· ${R[k].tickets} tickets</span></div>`).join('')}</div>`;
+  h += `<div class="legend">${Object.entries(SC).filter(([s])=>s!=='Otros'&&inC(s)).map(([s,c])=>`<span style="--c:${c}">${s}</span>`).join('')}</div>`;
+  const hs = Object.values(R.caballos).sort((a,b)=>(b.BS.ventas/(R.BS.ventas||1)+b.USD.ventas/(R.USD.ventas||1))-(a.BS.ventas/(R.BS.ventas||1)+a.USD.ventas/(R.USD.ventas||1)));
+  const lim = D.alertas.length ? 50 : 50;
+  h += hs.map(x => { const pb = R.BS.ventas? x.BS.ventas/R.BS.ventas*100:0, pu = R.USD.ventas? x.USD.ventas/R.USD.ventas*100:0;
+    const seg = Object.entries(x.porSector).map(([s,v]) => [s,(R.BS.ventas? v.BS.ventas/R.BS.ventas:0)+(R.USD.ventas? v.USD.ventas/R.USD.ventas:0)]); const sum = seg.reduce((a,[,v])=>a+v,0)||1;
+    return `<div class="card horse ${Math.max(pb,pu)>=lim?'hot':''}" onclick="openHorse('${esc(x.caballo)}')"><div class="n">${esc(x.caballo)}</div><div>
+      <div class="amts"><div><span class="amt bs">${short(x.BS.ventas)}</span><span class="pc">${pb.toFixed(0)}%</span><div class="bar"><i style="width:${pb}%;background:var(--bs)"></i></div></div>
+      <div><span class="amt usd">${short(x.USD.ventas)}</span><span class="pc">${pu.toFixed(0)}%</span><div class="bar"><i style="width:${pu}%;background:var(--usd)"></i></div></div></div>
+      <div class="sbar">${seg.map(([s,v])=>`<i style="width:${v/sum*100}%;background:${SC[s]}"></i>`).join('')}</div>
+      ${x.BS.premios||x.USD.premios?`<div class="sub" style="margin-top:4px">Pagó ${x.BS.premios?`<span class="bs">${fmt(x.BS.premios)} BS</span> `:''}${x.USD.premios?`<span class="usd">${fmt(x.USD.premios)} USD</span>`:''}</div>`:''}
+    </div></div>`; }).join('');
+  $('#v-carreras').innerHTML = h + '<div class="sub" style="text-align:center">Toca un caballo para ver cómo se reparte</div>'; keepChip();
+}
+function keepChip(){ const on = document.querySelector('#raceChips .chip.on'); if (on) on.scrollIntoView({inline:'center',block:'nearest'}); }
+function openHorse(cab){
+  sheetFn = () => {
+    const R0 = D.races[race]; const H0 = R0 && R0.caballos[cab]; if (!H0) return closeSheet();
+    const H = sumSect(H0.porSector);
+    const tb = H.BS.ventas || 1, tu = H.USD.ventas || 1;
+    const cell = (v, t, c) => v.ventas || v.anulados ? `<b class="${c}">${fmt(v.ventas)}</b><div class="s">${Math.round(v.ventas/t*100)} % · ${v.tickets} t${v.anulado?` · anul. ${fmt(v.anulado)}`:''}</div>` : '<span class="s">—</span>';
+    const sec = Object.entries(H0.porSector).filter(([s])=>inC(s)).filter(([,v])=>v.BS.tickets+v.USD.tickets+v.BS.anulados+v.USD.anulados)
+      .sort((a,b)=>(b[1].BS.ventas/tb+b[1].USD.ventas/tu)-(a[1].BS.ventas/tb+a[1].USD.ventas/tu));
+    const tq = Object.values(H0.porTaquilla).filter(t=>inC(t.sector)).sort((a,b)=>b.ventas/(b.moneda==='BS'?tb:tu)-a.ventas/(a.moneda==='BS'?tb:tu));
+    const head = `<div class="hrow"><span></span><span class="bs">BS</span><span class="usd">USD</span></div>`;
+    $('#sheetBody').innerHTML = `<div class="ttl"><div><b>Caballo #${esc(cab)}</b><div class="sub">Carrera ${race}${centro==='Ambos'?'':' · '+centro}</div></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><div class="card cur BS" style="margin:0"><span class="tag">BS</span> <b>${fmt(H.BS.ventas)}</b><div class="sub">${H.BS.tickets} tickets${H.BS.premios?` · pagó ${fmt(H.BS.premios)}`:''}</div></div>
+      <div class="card cur USD" style="margin:0"><span class="tag">USD</span> <b>${fmt(H.USD.ventas)}</b><div class="sub">${H.USD.tickets} tickets${H.USD.premios?` · pagó ${fmt(H.USD.premios)}`:''}</div></div></div>
+      <h2>Por sector</h2>${head}${sec.map(([s,v])=>`<div class="hrow"><span><span style="color:${SC[s]}">■</span> ${s}</span><span>${cell(v.BS,tb,'bs')}</span><span>${cell(v.USD,tu,'usd')}</span></div>`).join('') || '<div class="empty">Sin jugadas</div>'}
+      <h2>Por taquilla</h2>${head}${tq.map(t=>{ const v = t, tot = t.moneda==='BS'?tb:tu, c = t.moneda==='BS'?'bs':'usd';
+        const x = `<b class="${c}">${fmt(v.ventas)}</b><div class="s">${Math.round(v.ventas/tot*100)} % · ${v.tickets} t${v.premios?` · pagó ${fmt(v.premios)}`:''}${v.anulado?` · anul. ${fmt(v.anulado)}`:''}</div>`;
+        return `<div class="hrow"><span>${esc(t.nombre)}<div class="s" style="color:${SC[t.sector]}">${t.sector}</div></span><span>${t.moneda==='BS'?x:'<span class="s">—</span>'}</span><span>${t.moneda==='USD'?x:'<span class="s">—</span>'}</span></div>`; }).join('')}`;
+  };
+  sheetFn(); $('#sheet').className = 'sheet on';
+}
+function closeSheet(){ $('#sheet').className = 'sheet'; sheetFn = null; }
+
+// ---------- Alertas ----------
+function alCard(a){
+  return `<div class="card al ${a.nivel}"><div class="t"><span>${esc(a.tipo)}${a.carrera?` · C${a.carrera}`:''}</span><span class="h">${hhmm(a.hora, true)}</span></div>
+    <div>${a.taquilla&&a.taquilla!=='—'?esc(a.taquilla):''}${a.sector&&a.sector!=='—'?` · <span style="color:${SC[a.sector]}">${a.sector}</span>`:''}${a.jugada?` · ${esc(a.jugada)}`:''}${a.monto!=null?` · <b>${fmt(a.monto)} ${a.moneda}</b>`:''}</div>
+    <div class="d">${esc(a.detalle)}</div>${a.revisado?`<div class="d" style="color:var(--bs)">✅ Revisado por ${esc(a.revisado.quien)} · ${hhmm(a.revisado.hora)}</div>`:''}${a.silenciada?'<div class="d">🔕 Taquilla silenciada</div>':''}</div>`;
+}
+function alertasC(){ return D.alertas.filter(a => !a.sector || a.sector === '—' || inC(a.sector)); }
+function rAlertas(){
+  const AL = alertasC();
+  const tipos = ['Todas', ...new Set(AL.map(a=>a.tipo))];
+  const base = AL.filter(a => fNivel==='todas' || a.nivel===fNivel);
+  const list = base.filter(a => fAl==='Todas' || a.tipo===fAl);
+  $('#v-alertas').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><button onclick="openIA()">🤖 Sugerencias IA${nSug?` <span class="badge" style="background:var(--navy);color:#fff">${nSug}</span>`:''}</button><button onclick="openConfig()">⚙ Configurar</button></div><div class="chips">${['todas','alta','media','baja'].map(n=>`<button class="chip ${n===fNivel?'on':''}" onclick="fNivel='${n}';rAlertas()">${n==='todas'?'Todos los niveles':'Nivel '+n}<small>${n==='todas'?AL.length:AL.filter(a=>a.nivel===n).length}</small></button>`).join('')}</div>
+    <div class="chips">${tipos.map(t=>`<button class="chip ${t===fAl?'on':''}" onclick="fAl='${t}';rAlertas()">${t}<small>${t==='Todas'?base.length:base.filter(a=>a.tipo===t).length}</small></button>`).join('')}</div>
+    ${list.slice(0,200).map(alCard).join('') || '<div class="empty">Sin alertas.</div>'}
+    ${list.length>200?`<div class="sub" style="text-align:center">Mostrando 200 de ${list.length}</div>`:''}`;
+}
+
+// ---------- Sugerencias de la IA ----------
+let nSug = 0;
+async function cargarNSug(){ try { const j = await (await fetch('/api/sugerencias')).json(); nSug = j.pendientes.length; } catch {} }
+cargarNSug(); setInterval(cargarNSug, 60000);
+const PRI = {alta:'var(--alta)', media:'var(--media)', baja:'var(--baja)'};
+function reglaTxt(x){
+  if (x.tipo === 'vigilarTaquilla') return `Avisar (alerta alta) cada ticket de esta taquilla${x.montoMinimo?` desde ${fmt(x.montoMinimo)}`:''}`;
+  if (x.tipo === 'vigilarCliente') return `Avisar (alerta alta) cada ticket de este cliente${x.montoMinimo?` desde ${fmt(x.montoMinimo)}`:''}`;
+  if (x.tipo === 'ajustarUmbral') return `Cambiar ${CONF[x.alerta]?.t || x.alerta} · ${CONF[x.alerta]?.f[x.campo] || x.campo} a ${fmt(x.valor)}`;
+  return 'Solo observación, no crea alerta';
+}
+async function openIA(){
+  sheetFn = null;
+  const j = await (await fetch('/api/sugerencias')).json(); nSug = j.pendientes.length;
+  $('#sheetBody').innerHTML = `<div class="ttl"><div><b>Sugerencias de la IA</b><div class="sub">${j.jornadas.length} días en el historial${j.jornadas.length?` · desde ${j.jornadas[0]}`:''}</div></div>
+      <button onclick="analizarIA(this)" ${!j.iaActiva||j.analizando?'disabled':''}>${j.analizando?'Analizando…':'Analizar ahora'}</button></div>
+    ${!j.iaActiva?'<div class="card" style="margin-top:10px">Falta conectar la clave de la IA. Mientras tanto el historial se sigue guardando cada jornada.</div>':''}
+    ${j.error?`<div class="card" style="margin-top:10px;border-color:var(--alta)">${esc(j.error)}</div>`:''}
+    <div class="sub" style="margin-top:8px">La IA revisa el historial cada noche a las 11 p. m. y propone qué vigilar. Tú decides: lo que apruebas pasa a ser una alerta; lo que descartas, con su motivo, le enseña qué no te interesa.</div>
+    <h2>Para revisar (${j.pendientes.length})</h2>
+    ${j.pendientes.map(sg=>`<div class="card al" style="border-left-color:${PRI[sg.prioridad]}"><div class="t"><span>${esc(sg.titulo)}</span><span class="h">prioridad ${sg.prioridad}</span></div>
+      <div style="margin-top:4px">${esc(sg.explicacion)}</div><div class="d">📊 ${esc(sg.evidencia)}</div><div class="d">➜ ${esc(reglaTxt(sg.regla))}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button style="background:var(--pos);color:#fff;border-color:var(--pos);font-weight:600" onclick="accionIA('${sg.id}','aprobar')">Aprobar</button><button onclick="accionIA('${sg.id}','descartar')">Descartar</button></div></div>`).join('') || '<div class="sub">No hay sugerencias pendientes.</div>'}
+    <h2>Reglas activas (${j.reglas.length})</h2>
+    ${j.reglas.map(r=>`<div class="li"><div>${esc(r.titulo)}<div class="s">${esc(reglaTxt(r.regla))}</div></div><button onclick="quitarRegla('${r.id}')">Quitar</button></div>`).join('') || '<div class="sub">Ninguna todavía.</div>'}
+    ${j.revisadas.length?`<h2>Revisadas</h2>${j.revisadas.map(sg=>`<div class="li"><div>${sg.estado==='aprobada'?'✅':'✖️'} ${esc(sg.titulo)}<div class="s">${sg.quien?esc(sg.quien)+' · ':''}${sg.motivo?esc(sg.motivo):''}</div></div></div>`).join('')}`:''}`;
+  $('#sheet').className = 'sheet on';
+}
+async function analizarIA(b){ b.disabled = true; b.textContent = 'Analizando…'; await fetch('/api/sugerencias/analizar',{method:'POST'}); const t = setInterval(async()=>{ const j = await (await fetch('/api/sugerencias')).json(); if (!j.analizando){ clearInterval(t); openIA(); } }, 3000); }
+async function accionIA(id, accion){
+  let motivo = '';
+  if (accion === 'descartar') { motivo = prompt('¿Por qué la descartas? (ayuda a la IA a aprender)') ?? null; if (motivo === null) return; }
+  let quien = ''; try { quien = localStorage.getItem('quien') || ''; } catch {}
+  if (!quien) { quien = prompt('Tu nombre (para el registro)') || ''; try { localStorage.setItem('quien', quien); } catch {} }
+  await fetch('/api/sugerencias/accion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,accion,motivo,quien})});
+  openIA(); load();
+}
+async function quitarRegla(id){ if (!confirm('¿Quitar esta regla?')) return; await fetch('/api/reglas/quitar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}); openIA(); load(); }
+
+// ---------- Configuración de alertas ----------
+const CONF = {
+  ventaTardia: { t: 'Venta tardía', d: 'Venta después de la hora de la carrera. Si se vendió después del cierre real, siempre es nivel alto.', f: { leveSeg: 'Nivel bajo desde (segundos)', mediaSeg: 'Nivel medio desde (segundos)', graveSeg: 'Nivel alto desde (segundos)' } },
+  cierreTardio: { t: 'Cierre tardío', d: 'La carrera se cerró tarde respecto a su hora programada', f: { mediaSeg: 'Nivel medio desde (segundos)', altaSeg: 'Nivel alto desde (segundos)' } },
+  ticketGrande: { t: 'Ticket grande', d: 'Cada taquilla se mide contra su propio historial: avisa cuando un ticket supera lo que esa taquilla vende normalmente. El monto general solo se usa en taquillas nuevas o con poco historial.', b: { porTaquilla: 'Usar el historial de cada taquilla' }, f: { percentil: 'Percentil del historial (99 = el 1% más alto)', vecesAlta: 'Nivel alto desde (veces el umbral)', minTickets: 'Tickets mínimos de historial', pisoBS: 'Piso BS', pisoUSD: 'Piso USD', BS: 'Monto general BS', USD: 'Monto general USD' } },
+  ticketAtipicoTaquilla: { t: 'Apuesta atípica', d: 'Solo para taquillas sin historial suficiente: ticket muy por encima de lo que vendió hoy', f: { vecesMediana: 'Veces el ticket normal', minimoBS: 'Mínimo BS', minimoUSD: 'Mínimo USD' } },
+  taquillaEnPerdida: { t: 'Taquilla en pérdida', d: 'Ganancia del día por debajo de', f: { BS: 'BS (negativo)', USD: 'USD (negativo)' } },
+  anulaciones: { t: 'Anulaciones', d: 'Muchos tickets anulados en una taquilla', f: { cantidad: 'Cantidad de anulados', porcentajeVenta: '% de la venta' } },
+  cargaEnCaballo: { t: 'Carga en un caballo', d: 'Un caballo concentra el dinero de la carrera', f: { porcentaje: '% de la carrera', minimoBS: 'Mínimo BS', minimoUSD: 'Mínimo USD' } },
+};
+let cfg = null;
+async function openConfig(){
+  cfg = await (await fetch('/api/config')).json();
+  sheetFn = null;
+  $('#sheetBody').innerHTML = `<div class="ttl"><b>Configurar alertas</b><button onclick="saveConfig()" style="background:var(--navy);color:#fff;border-color:var(--accent);font-weight:600">Guardar</button></div>
+    <div class="sub" style="margin:6px 0 4px">Los cambios aplican para todos los que usan el monitor.</div>
+    ${Object.entries(CONF).map(([k,c]) => `<div class="card" style="margin-top:10px"><label style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span><b>${c.t}</b><div class="sub">${c.d}</div></span>
+      <input type="checkbox" data-k="${k}" data-f="activa" ${cfg.alertas[k].activa?'checked':''} style="width:24px;height:24px;accent-color:var(--accent)"></label>
+      ${Object.entries(c.b||{}).map(([f,l]) => `<label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" data-k="${k}" data-f="${f}" ${cfg.alertas[k][f]?'checked':''} style="accent-color:var(--accent)"> ${l}</label>`).join('')}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">${Object.entries(c.f).map(([f,l]) => `<label class="l">${l}<input type="number" inputmode="decimal" data-k="${k}" data-f="${f}" value="${cfg.alertas[k][f]}" style="width:100%;margin-top:3px"></label>`).join('')}</div></div>`).join('')}
+    <div class="card" style="margin-top:10px"><b>Telegram</b><div class="sub">${cfg.telegram.activo ? `Activo · ${cfg.telegram.suscriptores} suscritos` : 'Todavía no conectado'}</div>
+      <div class="l" style="margin-top:8px">Enviar alertas de nivel</div><div style="display:flex;gap:14px;margin-top:4px">${['alta','media','baja'].map(n=>`<label><input type="checkbox" data-tg="${n}" ${cfg.telegram.niveles.includes(n)?'checked':''} style="accent-color:var(--accent)"> ${n}</label>`).join('')}</div></div>
+    <div class="card" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span><b>Sesión</b><div class="sub">${esc(YO?.nombre || '')}</div></span><button onclick="salir()">Cerrar sesión</button></div>`;
+  $('#sheet').className = 'sheet on';
+}
+async function saveConfig(){
+  const al = {};
+  document.querySelectorAll('#sheetBody [data-k]').forEach(i => { (al[i.dataset.k] ||= {})[i.dataset.f] = i.type === 'checkbox' ? i.checked : +i.value; });
+  const tgN = [...document.querySelectorAll('#sheetBody [data-tg]')].filter(i=>i.checked).map(i=>i.dataset.tg);
+  await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({alertas: al, telegramNiveles: tgN})});
+  closeSheet(); load();
+}
+
+// ---------- Taquillas ----------
+function rTaquillas(){
+  const al = {}; D.alertas.forEach(a=>{ if(a.uid) al[a.uid]=(al[a.uid]||0)+1; });
+  const secs = ['Todos', ...Object.keys(SC).filter(s => inC(s) && D.taquillas.some(t=>t.sector===s))];
+  if (!secs.includes(fSect)) fSect = 'Todos';
+  const rows = D.taquillas.filter(t => inC(t.sector) && (fSect==='Todos'||t.sector===fSect) && (!q || t.nombre.toLowerCase().includes(q))).sort((a,b)=>(a.ventas?(a.ventas-a.premios)/a.ventas:0)-(b.ventas?(b.ventas-b.premios)/b.ventas:0));
+  const box = $('#v-taquillas');
+  if (!box.querySelector('.search')) box.innerHTML = `<input class="search" type="search" placeholder="Buscar taquilla" oninput="q=this.value.toLowerCase();rTaquillas()"><div id="tqChips"></div><div id="tqList"></div>`;
+  $('#tqChips').innerHTML = `<div class="chips">${secs.map(s=>`<button class="chip ${s===fSect?'on':''}" onclick="fSect='${s}';rTaquillas()">${s}</button>`).join('')}</div>`;
+  $('#tqList').innerHTML = rows.map(t => { const g = t.ventas - t.premios, c = t.moneda==='BS'?'bs':'usd';
+    return `<div class="card tq" onclick="openTaq('${t.uid}')"><div><div class="nm">${esc(t.nombre)} ${al[t.uid]?`<span class="badge" style="background:var(--media);color:#111">${al[t.uid]}</span>`:''}</div>
+      <div class="sub"><span style="color:${SC[t.sector]}">${t.sector}</span> · ${t.tickets} tickets${t.anulados?` · ${t.anulados} anulados`:''}</div></div>
+      <div class="r"><div class="${c}" style="font-weight:600">${short(t.ventas)} ${t.moneda}</div><div class="sub">ganancia <b class="${ng(g)}">${short(g)}</b></div></div></div>`; }).join('') || '<div class="empty">Sin taquillas con jugadas.</div>';
+}
+let sectoresList = null;
+async function openTaq(uid){
+  if (!sectoresList) sectoresList = (await (await fetch('/api/taquillas')).json()).sectores;
+  sheetFn = () => {
+    const t = D.taquillas.find(x=>x.uid===uid); if (!t) return closeSheet();
+    const g = t.ventas - t.premios; const als = D.alertas.filter(a=>a.uid===uid);
+    $('#sheetBody').innerHTML = `<div class="ttl"><div><b>${esc(t.nombre)}</b><div class="sub">${t.moneda} · ${t.tickets} tickets</div></div></div>
+      <div class="grid3" style="margin:12px 0"><div><div class="l">Ventas</div><div class="v">${fmt(t.ventas)}</div></div><div><div class="l">Premios</div><div class="v">${fmt(t.premios)}</div></div><div><div class="l">Ganancia</div><div class="v ${ng(g)}">${fmt(g)}</div></div></div>
+      <label class="l">Sector</label><select style="width:100%;margin-top:4px" onchange="mover('${uid}',this.value)">${sectoresList.map(s=>`<option ${s===t.sector?'selected':''}>${s}</option>`).join('')}</select>
+      <div class="sub" style="margin-top:4px">El cambio se guarda en este monitor; no cambia nada en ondrv.</div>
+      <h2>Ticket grande</h2><div class="card" id="umbralBox"><div class="sub">Cargando historial…</div></div>
+      <h2>Alertas de esta taquilla (${als.length})</h2>${als.slice(0,50).map(alCard).join('') || '<div class="sub">Sin alertas.</div>'}`;
+  };
+  const pinta = sheetFn; sheetFn = () => { pinta(); rUmbral(uid); };
+  sheetFn(); $('#sheet').className = 'sheet on';
+}
+const UMB = {};
+async function rUmbral(uid, fresh){
+  if (!UMB[uid] || fresh) UMB[uid] = await (await fetch('/api/umbral?uid='+uid)).json();
+  const u = UMB[uid], box = $('#umbralBox'); if (!box) return;
+  const f = { historial: `Según su historial (${u.tickets} tickets en ${u.jornadas} jornadas)`, manual: 'Fijado a mano por un gerente', general: `Umbral general: esta taquilla tiene poco historial (${u.tickets} tickets)` }[u.fuente];
+  box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline"><span class="l">Avisa desde</span><b style="font-size:20px">${fmt(u.monto)}</b></div>
+    <div class="sub" style="margin-top:2px">${f}</div>
+    ${u.tickets ? `<div class="grid3" style="margin-top:10px"><div><div class="l">Ticket típico</div><div class="v">${fmt(u.mediana)}</div></div><div><div class="l">95% de sus tickets</div><div class="v">≤ ${fmt(u.p95)}</div></div><div><div class="l">Récord</div><div class="v">${fmt(u.record)}</div></div></div>` : ''}
+    <label class="l" style="display:block;margin-top:10px">Fijar umbral a mano (vacío = automático)</label>
+    <div style="display:flex;gap:8px;margin-top:4px"><input id="umbralIn" type="number" inputmode="decimal" value="${u.manual||''}" placeholder="automático" style="flex:1"><button onclick="fijarUmbral('${uid}')">Guardar</button></div>`;
+}
+async function fijarUmbral(uid){
+  const v = $('#umbralIn').value;
+  UMB[uid] = await (await fetch('/api/umbral',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid,monto:v?+v:null})})).json();
+  rUmbral(uid); load();
+}
+async function mover(uid, sector){ await fetch('/api/sector',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid,sector})}); load(); }
+
+// ---------- navegación y refresco ----------
+function go(v){ view = v; document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on', b.dataset.v===v)); document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on', x.id==='v-'+v)); closeSheet(); if (D) render(); window.scrollTo(0,0); }
+$('#nav').onclick = e => { const b = e.target.closest('button'); if (b) go(b.dataset.v); };
+$('#slider').oninput = e => { hasta = +e.target.value; load(); };
+$('#play').onclick = () => { playing = !playing; $('#play').textContent = playing ? '❚❚' : '▶'; if (playing && +$('#slider').value >= +$('#slider').max) { hasta = +$('#slider').min; } };
+setInterval(() => { if (!playing || !D || D.modo !== 'repeticion') return; const s = $('#slider'); hasta = Math.min(+s.max, (hasta || +s.min) + 3000 * +$('#speed').value); s.value = hasta; if (hasta >= +s.max) { playing = false; $('#play').textContent = '▶'; } load(); }, 3000);
+setInterval(() => { if (D && D.modo === 'vivo' && !document.hidden) load(); }, 3000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+load();
+</script>
+</body>
+</html>
