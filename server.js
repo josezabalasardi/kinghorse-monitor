@@ -60,7 +60,11 @@ async function get(p, params = {}) {
 }
 
 // ---------- estado ----------
-const S = { date: null, taquillas: {}, grupos: {}, carreras: {}, tickets: new Map(), lastFull: 0, lastNew: 0, lastCal: 0, error: null, updatedAt: 0 };
+// Un "día" guarda los tickets de TODOS los hipódromos (La Rinconada e internacionales) y el calendario de cada uno.
+// S es el día en vivo; los días pasados que alguien pide se cargan aparte y se guardan un rato en memoria.
+const NACIONAL = 'RINCONADA';
+const nuevoDia = (date, vivo) => ({ date, vivo, hipodromos: {}, carreras: {}, tickets: new Map(), lastFull: 0, lastNew: 0, lastCal: 0, error: null, updatedAt: 0 });
+const S = Object.assign(nuevoDia(null, !FIXED_DATE), { taquillas: {}, grupos: {} });
 let sectorOverrides = {};
 try { sectorOverrides = JSON.parse(fs.readFileSync(SECTORS_FILE, 'utf8')); } catch {}
 
@@ -91,40 +95,48 @@ async function loadCatalogs() {
   }
 }
 // ondrv no guarda la hora real de cierre: el monitor la captura al ver que la carrera pasa a "Closed".
+// En el archivo, las carreras de La Rinconada van por número (como siempre) y las internacionales como "gp:5".
 const DIR_CIERRES = path.join(__dirname, 'cierres');
+const claveCierre = (bris, n) => bris === NACIONAL ? String(n) : `${bris}:${n}`;
 let CIERRES = { fecha: null, datos: {} };
 function cierresDe(fecha) {
   if (CIERRES.fecha !== fecha) { CIERRES = { fecha, datos: {} }; try { CIERRES.datos = JSON.parse(fs.readFileSync(path.join(DIR_CIERRES, fecha + '.json'), 'utf8')); } catch {} }
   return CIERRES.datos;
 }
-async function loadCalendar() {
-  const c = await get('/api/closes/day', { date: S.date });
-  const h = c.data.hipodromos.find(x => x.brisCode === CFG.hipodromo);
-  const prev = S.carreras, cie = cierresDe(S.date), now = Date.now(); let nuevo = false;
-  S.carreras = {};
-  for (const r of h?.races || []) {
-    const n = +r.raceNumber, cerrada = r.status === 'Closed';
-    // solo se registra si la vimos abierta antes: así la hora es real (con margen del refresco)
-    if (!FIXED_DATE && cerrada && prev[n] && prev[n].status !== 'Closed' && !cie[n]) { cie[n] = { closeMs: now, margenSeg: Math.round((now - (S.lastCal || now)) / 1000) }; nuevo = true; }
-    S.carreras[n] = { postMs: r.postMs, postTime: r.postTime, status: r.status, hasResult: r.hasResult, closeMs: cie[n]?.closeMs || null, margenSeg: cie[n]?.margenSeg ?? null };
+async function loadCalendar(X = S) {
+  const c = await get('/api/closes/day', { date: X.date });
+  const prev = X.carreras, cie = X.vivo ? cierresDe(X.date) : (() => { try { return JSON.parse(fs.readFileSync(path.join(DIR_CIERRES, X.date + '.json'), 'utf8')); } catch { return {}; } })();
+  const now = Date.now(); let nuevo = false;
+  X.hipodromos = {}; X.carreras = {};
+  for (const h of c.data.hipodromos || []) {
+    X.hipodromos[h.brisCode] = { bris: h.brisCode, nombre: h.brisCode === NACIONAL ? 'La Rinconada' : h.name, nacional: !!h.national || h.brisCode === NACIONAL, tipo: h.type };
+    const C = X.carreras[h.brisCode] = {};
+    for (const r of h.races || []) {
+      const n = +r.raceNumber, cerrada = r.status === 'Closed', k = claveCierre(h.brisCode, n), antes = prev[h.brisCode]?.[n];
+      // solo se registra si la vimos abierta antes: así la hora es real (con margen del refresco)
+      if (X.vivo && cerrada && antes && antes.status !== 'Closed' && !cie[k]) { cie[k] = { closeMs: now, margenSeg: Math.round((now - (X.lastCal || now)) / 1000) }; nuevo = true; }
+      C[n] = { postMs: r.postMs, postTime: r.postTime, status: r.status, hasResult: r.hasResult, closeMs: cie[k]?.closeMs || null, margenSeg: cie[k]?.margenSeg ?? null };
+    }
   }
-  if (nuevo) { fs.mkdirSync(DIR_CIERRES, { recursive: true }); fs.writeFileSync(path.join(DIR_CIERRES, S.date + '.json'), JSON.stringify(cie, null, 1)); }
-  S.lastCal = now;
+  if (nuevo) { fs.mkdirSync(DIR_CIERRES, { recursive: true }); fs.writeFileSync(path.join(DIR_CIERRES, X.date + '.json'), JSON.stringify(cie, null, 1)); }
+  X.lastCal = now;
 }
-// ¿hay una carrera por cerrar? entonces el calendario se consulta más seguido
+// ¿hay una carrera por cerrar en un hipódromo donde estamos vendiendo? entonces el calendario se consulta más seguido
 function carreraPorCerrar() {
-  const now = Date.now();
-  return Object.values(S.carreras).some(c => c.status !== 'Closed' && c.postMs && now > c.postMs - 3 * 60e3 && now < c.postMs + 20 * 60e3);
+  const now = Date.now(), activos = new Set([NACIONAL]);
+  for (const t of S.tickets.values()) activos.add(t.racecourse);
+  return [...activos].some(b => Object.values(S.carreras[b] || {}).some(c => c.status !== 'Closed' && c.postMs && now > c.postMs - 3 * 60e3 && now < c.postMs + 20 * 60e3));
 }
-function addTickets(rows) { for (const t of rows) S.tickets.set(t.id, t); }
-async function loadAllTickets() {
-  const j = await get('/api/history-org', { orgId: ORG, date: dmy(S.date), userId: auth.uid, brisCode: CFG.hipodromo, exportAll: true });
-  S.tickets = new Map(); addTickets(j.data); S.lastFull = Date.now();
-  if (!FIXED_DATE || BACKFILL) guardarHistorial();
+function addTickets(X, rows) { for (const t of rows) { t.racecourse ||= NACIONAL; X.tickets.set(t.id, t); } }
+async function loadAllTickets(X = S) {
+  const j = await get('/api/history-org', { orgId: ORG, date: dmy(X.date), userId: auth.uid, exportAll: true });
+  X.tickets = new Map(); addTickets(X, j.data); X.lastFull = Date.now();
+  if (X === S && (!FIXED_DATE || BACKFILL)) guardarHistorial();
 }
-function guardarHistorial() {
+// el historial (perfiles por taquilla e IA) sigue siendo de La Rinconada, carrera por carrera
+function guardarHistorial(X = S) {
   const taq = {}; for (const [uid, t] of Object.entries(S.taquillas)) taq[uid] = { ...t, sector: sectorOf(uid) };
-  try { ia.guardarJornada(S.date, [...S.tickets.values()], S.carreras, taq); } catch (e) { console.error('historial', e.message); }
+  try { ia.guardarJornada(X.date, [...X.tickets.values()].filter(t => t.racecourse === NACIONAL), X.carreras[NACIONAL] || {}, taq); } catch (e) { console.error('historial', e.message); }
 }
 async function descargarHistorial(dias) {
   await login(); await loadCatalogs();
@@ -134,8 +146,24 @@ async function descargarHistorial(dias) {
   }
 }
 async function loadNewTickets() {
-  const j = await get('/api/history-org', { orgId: ORG, date: dmy(S.date), userId: auth.uid, brisCode: CFG.hipodromo, limit: 300 });
-  addTickets(j.data); S.lastNew = Date.now();
+  const j = await get('/api/history-org', { orgId: ORG, date: dmy(S.date), userId: auth.uid, limit: 500 });
+  addTickets(S, j.data); S.lastNew = Date.now();
+}
+
+// días pasados: se cargan cuando alguien los pide y se guardan 15 minutos
+const DIAS = new Map();
+async function diaPasado(fecha) {
+  let e = DIAS.get(fecha);
+  if (e && Date.now() - e.t < 15 * 60e3) return e.p;
+  const X = nuevoDia(fecha, false);
+  const p = (async () => {
+    if (!Object.keys(S.taquillas).length) { await login(); await loadCatalogs(); }
+    await loadCalendar(X); await loadAllTickets(X); X.updatedAt = Date.now(); return X;
+  })();
+  DIAS.set(fecha, { t: Date.now(), p });
+  p.catch(() => DIAS.delete(fecha));
+  if (DIAS.size > 6) DIAS.delete(DIAS.keys().next().value);
+  return p;
 }
 
 let busy = false;
@@ -143,7 +171,7 @@ async function tick() {
   if (busy) return; busy = true;
   try {
     const d = today();
-    if (d !== S.date || !Object.keys(S.taquillas).length) { S.date = d; await login(); await loadCatalogs(); await loadCalendar(); await loadAllTickets(); }
+    if (d !== S.date || !Object.keys(S.taquillas).length) { S.date = d; S.carreras = {}; await login(); await loadCatalogs(); await loadCalendar(); await loadAllTickets(); }
     else if (!FIXED_DATE) {
       const now = Date.now(), R = CFG.refresco;
       if (now - S.lastCal > (carreraPorCerrar() ? (R.calendarioCercaSeg || 3) : R.calendarioSeg) * 1e3) await loadCalendar();
@@ -165,14 +193,14 @@ const median = a => { if (!a.length) return 0; const s = [...a].sort((x, y) => x
 
 // Perfil histórico por taquilla, recalculado cuando cambia el día
 let PERF = { fecha: null, datos: {} };
-function perfilDe(uid) {
-  if (PERF.fecha !== S.date) PERF = { fecha: S.date, datos: ia.perfiles(S.date) };
+function perfilDe(uid, fecha = S.date) {
+  if (PERF.fecha !== fecha) PERF = { fecha, datos: ia.perfiles(fecha) };
   return PERF.datos[uid];
 }
-function umbralGrande(uid, cur) {
+function umbralGrande(uid, cur, fecha) {
   const G = CFG.alertas.ticketGrande;
-  if (G.manual && G.manual[uid] > 0) return { monto: G.manual[uid], fuente: 'manual', record: perfilDe(uid)?.montos.at(-1) || 0 };
-  const P = perfilDe(uid);
+  if (G.manual && G.manual[uid] > 0) return { monto: G.manual[uid], fuente: 'manual', record: perfilDe(uid, fecha)?.montos.at(-1) || 0 };
+  const P = perfilDe(uid, fecha);
   if (G.porTaquilla && P && P.montos.length >= G.minTickets) {
     const piso = cur === 'BS' ? G.pisoBS : G.pisoUSD;
     return { monto: Math.max(piso, ia.percentil(P.montos, G.percentil)), fuente: 'historial', record: P.montos.at(-1) };
@@ -184,10 +212,26 @@ function infoUmbral(uid, cur) {
   return { ...U, tickets: P?.montos.length || 0, jornadas: P?.jornadas || 0, mediana: P ? ia.percentil(P.montos, 50) : null, p95: P ? ia.percentil(P.montos, 95) : null, p99: P ? ia.percentil(P.montos, 99) : null, manual: CFG.alertas.ticketGrande.manual?.[uid] || null };
 }
 
-function snapshot(until) {
-  const A = CFG.alertas;
-  const all = [...S.tickets.values()].filter(t => !until || t.createdAtMs <= until).sort((a, b) => a.createdAtMs - b.createdAtMs);
-  const now = until || (FIXED_DATE && all.length ? all[all.length - 1].createdAtMs : Date.now());
+// pista: 'RINCONADA' (por defecto), 'INTL' (todos los internacionales juntos), 'TODO', o el código de un hipódromo
+const esNacional = (X, b) => X.hipodromos[b]?.nacional ?? b === NACIONAL;
+function filtroPista(X, pista) {
+  if (pista === 'TODO') return () => true;
+  if (pista === 'INTL') return b => !esNacional(X, b);
+  return b => b === pista;
+}
+const COMB = 'Comb.';
+const siglas = b => b === NACIONAL ? 'LR' : b.toUpperCase();
+function snapshot(until, X = S, pista = NACIONAL) {
+  const A = CFG.alertas, enPista = filtroPista(X, pista);
+  const varias = pista === 'TODO' || pista === 'INTL';
+  // La Rinconada usa el número de carrera (así las alertas revisadas siguen valiendo); los internacionales, "gp-5"
+  const idC = (b, n) => b === NACIONAL ? String(n) : `${b}-${n}`;
+  const txtC = (b, n) => varias ? `${siglas(b)} C${n}` : `C${n}`;
+  const dia = [...X.tickets.values()];
+  const enDia = dia.filter(t => enPista(t.racecourse));
+  const all = enDia.filter(t => !until || t.createdAtMs <= until).sort((a, b) => a.createdAtMs - b.createdAtMs);
+  const finDia = dia.length ? Math.max(...dia.map(t => t.createdAtMs)) : Date.now();
+  const now = until || (!X.vivo || FIXED_DATE ? finDia : Date.now());
   const tot = { BS: blank(), USD: blank() };
   const sect = {}; for (const s of SECTORES) sect[s] = { BS: blank(), USD: blank() };
   const taq = {}; const races = {}; const alerts = [];
@@ -200,8 +244,10 @@ function snapshot(until) {
     const tq = taq[t.uid] ||= { uid: t.uid, nombre: nameOf(t.uid, t.email), sector: sec, moneda: cur, ...blank() };
     acc(tq, t); tq.last = t.createdAtMs;
     if (t.status !== 'cancel') (ticketsByTaq[t.uid] ||= []).push(t.income);
-    const [tipo, horse] = t.horses.split('-');
-    const R = races[t.race] ||= { carrera: t.race, BS: blank(), USD: blank(), caballos: {}, tardias: 0 };
+    const [tipo, sel] = t.horses.split('-'), cid = idC(t.racecourse, t.race);
+    // "6,winner" o "2,place" es una apuesta al caballo 6 o 2; "3,5/3,5" o "3/8/1" son combinadas (exacta, trifecta...)
+    const simple = /^(\d+)(,[a-z]+)?$/i.exec(sel || ''), horse = simple ? simple[1] : COMB;
+    const R = races[cid] ||= { carrera: cid, numero: t.race, pista: t.racecourse, etiqueta: txtC(t.racecourse, t.race), BS: blank(), USD: blank(), caballos: {}, tardias: 0 };
     acc(R[cur], t); R.last = t.createdAtMs;
     const H = R.caballos[horse] ||= { caballo: horse, BS: blank(), USD: blank(), porSector: {}, porTaquilla: {} };
     acc(H[cur], t);
@@ -209,9 +255,9 @@ function snapshot(until) {
     const ht = H.porTaquilla[t.uid] ||= { nombre: tq.nombre, sector: sec, moneda: cur, ...blank() }; acc(ht, t);
 
     if (t.status === 'cancel') continue;
-    const base = { hora: t.createdAtMs, carrera: t.race, taquilla: tq.nombre, uid: t.uid, sector: sec, moneda: cur, monto: t.income, jugada: `${tipo} ${horse}`, ticket: t.id, estado: t.status };
+    const base = { hora: t.createdAtMs, carrera: cid, carreraTxt: R.etiqueta, hipodromo: X.hipodromos[t.racecourse]?.nombre || t.racecourse, taquilla: tq.nombre, uid: t.uid, sector: sec, moneda: cur, monto: t.income, jugada: `${tipo} ${sel}`, ticket: t.id, estado: t.status };
     // 1. venta después de la hora asignada (y, si se capturó, después del cierre real)
-    const C = S.carreras[t.race], post = C?.postMs;
+    const C = X.carreras[t.racecourse]?.[t.race], post = C?.postMs;
     if (A.ventaTardia.activa && post && t.createdAtMs > post + (A.ventaTardia.leveSeg || 0) * 1000) {
       const seg = Math.round((t.createdAtMs - post) / 1000); R.tardias++;
       const gano = t.status === 'pay' || t.status === 'win';
@@ -224,7 +270,7 @@ function snapshot(until) {
         detalle: `${seg} s después de la hora (${C.postTime})${cierreTxt}${gano ? ' · ticket GANADOR, pagó ' + fmt(t.egress) : ''}` });
     }
     // 2. ticket grande: umbral propio de cada taquilla según su historial
-    const U = A.ticketGrande.activa ? umbralGrande(t.uid, cur) : null;
+    const U = A.ticketGrande.activa ? umbralGrande(t.uid, cur, X.date) : null;
     if (U && t.income > U.monto) {
       const alta = t.income >= U.monto * (A.ticketGrande.vecesAlta || 3) || (U.record && t.income > U.record);
       alerts.push({ ...base, tipo: 'Ticket grande', nivel: alta ? 'alta' : 'media',
@@ -240,12 +286,12 @@ function snapshot(until) {
     }
   }
   // cierre tardío: la carrera se cerró mucho después de la hora programada
-  if (A.cierreTardio?.activa) for (const [n, c] of Object.entries(S.carreras)) {
+  if (A.cierreTardio?.activa) for (const [b, cs] of Object.entries(X.carreras)) if (enPista(b)) for (const [n, c] of Object.entries(cs)) {
     if (!c.closeMs || !c.postMs || c.closeMs > now) continue;
     const seg = Math.round((c.closeMs - c.postMs) / 1000);
     if (seg < A.cierreTardio.mediaSeg) continue;
-    const R = races[n], venta = R ? R.BS.ventas + R.USD.ventas : 0;
-    alerts.push({ hora: c.closeMs, carrera: +n, tipo: 'Cierre tardío', nivel: seg >= A.cierreTardio.altaSeg ? 'alta' : 'media',
+    const R = races[idC(b, n)];
+    alerts.push({ hora: c.closeMs, carrera: idC(b, n), carreraTxt: txtC(b, n), hipodromo: X.hipodromos[b]?.nombre || b, tipo: 'Cierre tardío', nivel: seg >= A.cierreTardio.altaSeg ? 'alta' : 'media',
       detalle: `La carrera se cerró ${seg} s después de la hora (${c.postTime})${R?.tardias ? ` · ${R.tardias} tickets vendidos en ese tiempo` : ''}` });
   }
   // reglas aprobadas desde las sugerencias de la IA
@@ -257,7 +303,7 @@ function snapshot(until) {
                   (x.tipo === 'vigilarCliente' && t.clientId && t.clientId === x.clienteId && t.income >= (x.montoMinimo || 0));
       if (!hit) continue;
       const cur = S.taquillas[t.uid]?.moneda || 'USD', [tipo, horse] = t.horses.split('-');
-      alerts.push({ hora: t.createdAtMs, carrera: t.race, taquilla: nameOf(t.uid, t.email), uid: t.uid, sector: sectorOf(t.uid), moneda: cur, monto: t.income, jugada: `${tipo} ${horse}`, ticket: t.id, estado: t.status,
+      alerts.push({ hora: t.createdAtMs, carrera: idC(t.racecourse, t.race), carreraTxt: txtC(t.racecourse, t.race), taquilla: nameOf(t.uid, t.email), uid: t.uid, sector: sectorOf(t.uid), moneda: cur, monto: t.income, jugada: `${tipo} ${horse}`, ticket: t.id, estado: t.status,
         tipo: 'Regla: ' + rg.titulo, nivel: 'alta', detalle: (t.clientName ? 'Cliente ' + t.clientName + ' · ' : '') + 'Regla sugerida por la IA y aprobada' });
     }
   }
@@ -274,17 +320,28 @@ function snapshot(until) {
     const tv = R[cur].ventas; const min = A.cargaEnCaballo['minimo' + cur];
     for (const H of Object.values(R.caballos)) {
       const p = tv ? H[cur].ventas / tv * 100 : 0;
-      if (A.cargaEnCaballo.activa && p >= A.cargaEnCaballo.porcentaje && H[cur].ventas >= min)
-        alerts.push({ hora: R.last, carrera: R.carrera, tipo: 'Carga en un caballo', nivel: 'media', moneda: cur, monto: H[cur].ventas, taquilla: '—', sector: '—', detalle: `Caballo ${H.caballo}: ${Math.round(p)} % del dinero ${cur} de la carrera ${R.carrera}` });
+      if (H.caballo !== COMB && A.cargaEnCaballo.activa && p >= A.cargaEnCaballo.porcentaje && H[cur].ventas >= min)
+        alerts.push({ hora: R.last, carrera: R.carrera, carreraTxt: R.etiqueta, tipo: 'Carga en un caballo', nivel: 'media', moneda: cur, monto: H[cur].ventas, taquilla: '—', sector: '—', detalle: `Caballo ${H.caballo}: ${Math.round(p)} % del dinero ${cur} de la carrera ${R.etiqueta}` });
     }
   }
   for (const a of alerts) { a.id = [a.tipo, a.ticket || '', a.uid || '', a.carrera || '', a.moneda || ''].join('|'); if (TG.acks[a.id]) a.revisado = TG.acks[a.id]; if (a.uid && TG.mutes[a.uid] > Date.now()) a.silenciada = true; }
   const order = { alta: 0, media: 1, baja: 2 };
   alerts.sort((a, b) => b.hora - a.hora || order[a.nivel] - order[b.nivel]);
-  const carreras = Object.entries(S.carreras).map(([n, c]) => ({ carrera: +n, ...c, minutos: Math.round((c.postMs - now) / 60000),
-    cerrada: until || FIXED_DATE ? (c.closeMs ? now >= c.closeMs : now >= c.postMs + 3 * 60e3) : c.status === 'Closed' }));
-  return { fecha: S.date, ahora: now, modo: FIXED_DATE ? 'repeticion' : 'vivo', actualizado: S.updatedAt, error: S.error,
-    rango: S.tickets.size ? [Math.min(...[...S.tickets.values()].map(t => t.createdAtMs)), Math.max(...[...S.tickets.values()].map(t => t.createdAtMs))] : null,
+  // en vista combinada solo se listan las carreras internacionales donde hubo jugada (son cientos al día)
+  const carreras = [];
+  for (const [b, cs] of Object.entries(X.carreras)) if (enPista(b)) for (const [n, c] of Object.entries(cs)) {
+    const id = idC(b, n); if (varias && b !== NACIONAL && !races[id]) continue;
+    carreras.push({ ...c, postTime: c.postMs ? new Date(c.postMs).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' }) : c.postTime, carrera: id, numero: +n, pista: b, hipodromo: X.hipodromos[b]?.nombre || b, etiqueta: txtC(b, n), minutos: Math.round((c.postMs - now) / 60000),
+      cerrada: !until && (!X.vivo || !FIXED_DATE) && c.status === 'Closed' ? true : until || FIXED_DATE || !X.vivo ? (c.closeMs ? now >= c.closeMs : now >= c.postMs + 3 * 60e3) : c.status === 'Closed' });
+  }
+  carreras.sort((a, b) => a.postMs - b.postMs || a.numero - b.numero);
+  // lista de hipódromos del día para el selector, con lo vendido en cada uno
+  const pistas = {};
+  for (const h of Object.values(X.hipodromos)) pistas[h.bris] = { ...h, carreras: Object.keys(X.carreras[h.bris] || {}).length, tickets: 0, BS: 0, USD: 0 };
+  for (const t of dia) { if (t.status === 'cancel' || (until && t.createdAtMs > until)) continue; const p = pistas[t.racecourse] ||= { bris: t.racecourse, nombre: t.racecourse, nacional: false, carreras: 0, tickets: 0, BS: 0, USD: 0 }; p.tickets++; p[S.taquillas[t.uid]?.moneda || 'USD'] += t.income; }
+  return { fecha: X.date, hoy: today(), pista, ahora: now, modo: X.vivo && !FIXED_DATE ? 'vivo' : 'repeticion', actualizado: X.updatedAt, error: X.error,
+    pistas: Object.values(pistas).sort((a, b) => b.nacional - a.nacional || b.tickets - a.tickets || a.nombre.localeCompare(b.nombre)),
+    rango: enDia.length ? [Math.min(...enDia.map(t => t.createdAtMs)), Math.max(...enDia.map(t => t.createdAtMs))] : null,
     totales: tot, sectores: sect, taquillas: Object.values(taq), carreras, races, alertas: alerts.slice(0, 1500), totalAlertas: alerts.length };
 }
 const fmt = n => Math.round(n).toLocaleString('es-VE');
@@ -306,7 +363,7 @@ const escH = t => String(t ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '
 const horaVE = ms => new Date(ms).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Caracas' });
 function alertText(a) {
   const ico = { alta: '🔴', media: '🟠', baja: '⚪' }[a.nivel];
-  return `${ico} <b>${escH(a.tipo)}</b>${a.carrera ? ' · Carrera ' + a.carrera : ''}\n` +
+  return `${ico} <b>${escH(a.tipo)}</b>${a.carrera ? ` · ${escH(a.hipodromo || 'La Rinconada')} carrera ${String(a.carrera).split('-').pop()}` : ''}\n` +
     `${escH(a.taquilla && a.taquilla !== '—' ? a.taquilla : '')}${a.sector && a.sector !== '—' ? ' · ' + escH(a.sector) : ''}${a.jugada ? ' · ' + escH(a.jugada) : ''}\n` +
     `${a.monto != null ? '<b>' + fmt(a.monto) + ' ' + a.moneda + '</b> · ' : ''}${escH(a.detalle)}\n<i>${horaVE(a.hora)}</i>`;
 }
@@ -318,7 +375,7 @@ const keyboard = a => ({ inline_keyboard: [[
 const lastAlerts = new Map(); // id recortado -> alerta, para resolver los botones
 async function tgNotify() {
   if (!TG_TOKEN || (FIXED_DATE && !process.env.TELEGRAM_API) || !S.updatedAt) return;
-  const snap = snapshot(null);
+  const snap = snapshot(null, S, 'TODO');
   const nuevas = snap.alertas.filter(a => CFG.telegram.niveles.includes(a.nivel));
   if (!TG.sent) { TG.sent = new Set(nuevas.slice(process.env.TELEGRAM_API ? 2 : 0).map(a => a.id)); return; } // al arrancar no reenvía lo viejo
   for (const a of nuevas.reverse()) {
@@ -345,11 +402,11 @@ async function tgPoll() {
         } else if (!TG.chats[chat]) { await tg('sendMessage', { chat_id: chat, text: 'Escribe /start seguido de la clave para suscribirte.' }); }
         else if (cmd === '/salir') { delete TG.chats[chat]; saveTG(); await tg('sendMessage', { chat_id: chat, text: 'Ya no recibirás alertas.' }); }
         else if (cmd === '/resumen') {
-          const s = snapshot(null), t = s.totales;
-          const line = c => `${c}: ventas ${fmt(t[c].ventas)} · ganancia ${fmt(t[c].ventas - t[c].premios)} · ${t[c].tickets} tickets`;
-          await tg('sendMessage', { chat_id: chat, text: `<b>La Rinconada ${s.fecha}</b>\n${line('BS')}\n${line('USD')}\nAlertas altas: ${s.alertas.filter(a => a.nivel === 'alta').length}`, parse_mode: 'HTML' });
+          const bloque = (titulo, s) => { const t = s.totales, line = c => `${c}: ventas ${fmt(t[c].ventas)} · ganancia ${fmt(t[c].ventas - t[c].premios)} · ${t[c].tickets} tickets`;
+            return `<b>${titulo}</b>\n${line('BS')}\n${line('USD')}\nAlertas altas: ${s.alertas.filter(a => a.nivel === 'alta').length}`; };
+          await tg('sendMessage', { chat_id: chat, text: `<b>${S.date}</b>\n\n${bloque('La Rinconada', snapshot(null))}\n\n${bloque('Internacionales', snapshot(null, S, 'INTL'))}`, parse_mode: 'HTML' });
         } else if (cmd === '/alertas') {
-          const al = snapshot(null).alertas.filter(a => a.nivel === 'alta').slice(0, 5);
+          const al = snapshot(null, S, 'TODO').alertas.filter(a => a.nivel === 'alta').slice(0, 5);
           await tg('sendMessage', { chat_id: chat, text: al.map(alertText).join('\n\n') || 'Sin alertas altas.', parse_mode: 'HTML' });
         }
       }
@@ -420,7 +477,13 @@ http.createServer(async (req, res) => {
       res.writeHead(302, { Location: '/login.html' }); return res.end();
     }
     if (u.pathname === '/api/yo') return send(res, 200, req.sesion);
-    if (u.pathname === '/api/estado') return send(res, 200, snapshot(+u.searchParams.get('hasta') || null));
+    if (u.pathname === '/api/estado') {
+      const fecha = u.searchParams.get('fecha'), pista = (u.searchParams.get('pista') || NACIONAL).slice(0, 20), hasta = +u.searchParams.get('hasta') || null;
+      if (!fecha || fecha === S.date) return send(res, 200, snapshot(hasta, S, pista));
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || fecha > today()) return send(res, 400, { error: 'Fecha inválida' });
+      try { return send(res, 200, snapshot(hasta, await diaPasado(fecha), pista)); }
+      catch (e) { return send(res, 502, { error: 'No se pudo cargar ese día de ondrv: ' + e.message }); }
+    }
     if (u.pathname === '/api/config' && req.method === 'GET') return send(res, 200, { alertas: CFG.alertas, telegram: { activo: !!TG_TOKEN, niveles: CFG.telegram.niveles, suscriptores: Object.keys(TG.chats).length } });
     if (u.pathname === '/api/config' && req.method === 'POST') {
       let b = ''; for await (const c of req) b += c; const nuevo = JSON.parse(b);

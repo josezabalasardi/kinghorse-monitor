@@ -2,6 +2,8 @@
 
 Pensado para el teléfono: pestañas abajo (Resumen, Carreras, Alertas, Taquillas), tarjetas y hojas que suben desde abajo. Se puede instalar en la pantalla de inicio (Compartir → Agregar a inicio en iPhone, o menú → Instalar app en Android). Arriba hay un selector **Hipódromo / The Book / Ambos** que filtra toda la app; en Ambos aparece la comparación Hipódromo contra The Book en BS y USD. Cuando llega una alerta alta con la app abierta, aparece un aviso arriba y el teléfono vibra (en Android).
 
+Arriba se elige qué mirar: **Rinconada**, **Internacional** (todos los hipódromos internacionales juntos) o **Todo**. La lupa abre un buscador para ver un solo hipódromo internacional. Al lado del selector Hipódromo / The Book / Ambos está la **fecha**: cualquier día pasado se abre en modo repetición, con la barra de tiempo.
+
 Lee los datos de ondrv (solo lectura) y muestra:
 - Balance del día con **BS y USD lado a lado**.
 - Ventas y ganancia **por sector** (Sportbook, Tribuna A, B, C, Jockey Club, The Book). Al tocar un sector se abren sus taquillas.

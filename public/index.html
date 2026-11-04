@@ -82,6 +82,7 @@ h2:first-child{margin-top:4px}
 .racehd b{font:800 22px var(--num);font-stretch:75%}
 .horse{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
 .horse .n{font:800 22px var(--num);font-stretch:75%;text-align:center;background:var(--navy);color:#fff;border-radius:10px;padding:8px 0}
+.horse .n.comb{font-size:14px;padding:12px 0;background:var(--muted)}
 .horse .amts{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px}
 .horse .amt{font:700 17px var(--num);font-stretch:78%}
 .horse .pc{color:var(--muted);font-size:12px;margin-left:4px}
@@ -124,6 +125,10 @@ nav .badge{position:absolute;top:7px;left:calc(50% + 6px)}
 .li:last-child{border-bottom:0}
 .li .s{color:var(--muted);font-size:12px}
 .centro{display:flex}.centro .seg{flex:1;display:flex}.centro .seg button{flex:1}
+.filtros{display:flex;gap:8px;margin-bottom:8px}.filtros .seg{flex:1;display:flex;min-width:0}.filtros .seg button{flex:1 1 0;min-width:0;padding:7px 4px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lupa{flex:0 0 40px;padding:0;border-radius:10px;display:grid;place-items:center}.lupa svg{width:20px;height:20px;fill:none;stroke:var(--navy);stroke-width:2.2;stroke-linecap:round}
+.centro{gap:8px}.centro input{flex:0 0 auto;width:132px;min-width:0;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--navy);font-weight:600}
+.centro .seg{min-width:0}.centro .seg button{padding:7px 4px;font-size:13px;white-space:nowrap;min-width:0}
 .cmp{width:100%;border-collapse:collapse;font-size:13px}.cmp th,.cmp td{padding:6px 4px;text-align:right;border-bottom:1px solid var(--line)}.cmp th:first-child,.cmp td:first-child{text-align:left}.cmp th{color:var(--muted);font-weight:500;font-size:11px}
 .hrow{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);align-items:start}.hrow>span:not(:first-child){text-align:right}.hrow .s{color:var(--muted);font-size:11px}
 .toast{position:fixed;left:12px;right:12px;top:calc(10px + var(--safet));z-index:50;background:var(--altabg);color:var(--text);border:1px solid var(--alta);border-radius:12px;padding:10px 14px;display:none;max-width:736px;margin:0 auto;box-shadow:0 6px 20px #13244A33}
@@ -134,7 +139,8 @@ nav .badge{position:absolute;top:7px;left:calc(50% + 6px)}
 <div class="top">
   <div class="brand"><img src="logo.png" alt="King Horse"><div class="tt"><h1 id="ttl">La Rinconada</h1><span id="estado">cargando…</span></div><span class="dot" id="dot"></span></div>
   <div class="topin">
-  <div class="centro"><div class="seg" id="centroSel"></div></div>
+  <div class="filtros"><div class="seg" id="pistaSeg"></div><button class="lupa" onclick="buscarPista()" aria-label="Buscar hipódromo"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button></div>
+  <div class="centro"><div class="seg" id="centroSel"></div><input type="date" id="fechaSel" aria-label="Fecha"></div>
   <div class="replay" id="replay" hidden>
     <button id="play">▶</button>
     <input type="range" id="slider">
@@ -182,20 +188,62 @@ const blank = () => ({ventas:0,premios:0,tickets:0,anulado:0,anulados:0});
 const addTo = (o, v) => { for (const k in o) o[k] += v[k] || 0; return o; };
 function sumSect(porSector, filt = inC){ const r = {BS:blank(), USD:blank()}; for (const [s,v] of Object.entries(porSector||{})) if (filt(s)) { addTo(r.BS, v.BS); addTo(r.USD, v.USD); } return r; }
 function setCentro(c){ centro = c; try { localStorage.setItem('centro', c); } catch {} render(); }
+let pista = 'RINCONADA'; try { pista = localStorage.getItem('pista') || 'RINCONADA'; } catch {}
+let fecha = null; // null = hoy, en vivo
 let D = null, view = 'resumen', race = null, fAl = 'Todas', fNivel = 'todas', fSect = 'Todos', q = '', hasta = null, playing = false, seen = null, sheetFn = null;
 
 async function load(){
-  try { D = await (await fetch('/api/estado' + (hasta ? '?hasta=' + hasta : ''))).json(); render(); notify(); }
+  const qs = new URLSearchParams({ pista }); if (fecha) qs.set('fecha', fecha); if (hasta) qs.set('hasta', hasta);
+  const pedido = qs.toString(); load.ult = pedido;
+  try { const r = await fetch('/api/estado?' + pedido), j = await r.json(); if (load.ult !== pedido) return;
+    if (!r.ok) { $('#dot').className = 'dot err'; $('#estado').textContent = j.error || 'Error'; return; }
+    D = j; render(); notify(); }
   catch(e){ $('#dot').className = 'dot err'; $('#estado').textContent = 'sin conexión'; }
 }
+const PISTA_TXT = { RINCONADA: 'La Rinconada', INTL: 'Internacionales', TODO: 'Todo' };
+const nombrePista = p => PISTA_TXT[p] || D?.pistas?.find(x => x.bris === p)?.nombre || p;
+function setPista(p){ pista = p; try { localStorage.setItem('pista', p); } catch {} D = null; race = null; seen = null; hasta = null; resetSlider(); $('#estado').textContent = 'cargando…'; load(); }
+function setFecha(f){ fecha = f && f !== (D?.hoy) ? f : null; D = null; race = null; seen = null; hasta = null; playing = false; $('#play').textContent = '▶'; resetSlider(); $('#estado').textContent = 'cargando…'; load(); }
+function resetSlider(){ const s = $('#slider'); s.removeAttribute('max'); s.removeAttribute('min'); $('#replay').hidden = true; }
+function pintarFiltros(){
+  const fs = $('#fechaSel'); fs.max = D.hoy; if (document.activeElement !== fs) fs.value = D.fecha;
+  const una = !PISTA_TXT[pista];
+  $('#pistaSeg').innerHTML = `<button class="${pista==='RINCONADA'?'on':''}" onclick="setPista('RINCONADA')">Rinconada</button>`
+    + (una ? `<button class="on" onclick="setPista('INTL')" title="Volver a todos los internacionales">${esc(nombrePista(pista))} ✕</button>`
+           : `<button class="${pista==='INTL'?'on':''}" onclick="setPista('INTL')">Internacional</button>`)
+    + `<button class="${pista==='TODO'?'on':''}" onclick="setPista('TODO')">Todo</button>`;
+}
+// buscador de un hipódromo internacional
+function buscarPista(){
+  let qq = '';
+  sheetFn = () => {
+    const intl = (D?.pistas || []).filter(x => !x.nacional);
+    const n = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const lista = intl.filter(x => !qq || n(x.nombre + ' ' + x.bris).includes(n(qq)));
+    const fila = x => `<div class="li" style="cursor:pointer" onclick="closeSheet();setPista('${esc(x.bris)}')"><span><b>${esc(x.nombre)}</b><div class="s">${({Thoroughbred:'Purasangre',Harness:'Trotones',Greyhound:'Galgos','Quarter Horse':'Cuarto de milla'})[x.tipo] || esc(x.tipo || '')}${x.carreras ? ' · ' + x.carreras + ' carreras' : ''}</div></span>
+      <span style="text-align:right">${x.tickets ? `${x.BS ? `<b class="bs">${short(x.BS)} BS</b><br>` : ''}${x.USD ? `<b class="usd">${short(x.USD)} USD</b>` : ''}<div class="s">${fmt(x.tickets)} tickets</div>` : '<span class="s">sin jugada</span>'}</span></div>`;
+    const con = lista.filter(x => x.tickets), sin = lista.filter(x => !x.tickets);
+    const body = `${con.length ? `<h2>Con jugada</h2>${con.map(fila).join('')}` : ''}${sin.length ? `<h2>Sin jugada</h2>${sin.map(fila).join('')}` : ''}` || '<div class="empty">Ningún hipódromo coincide.</div>';
+    if (!$('#qPista')) {
+      $('#sheetBody').innerHTML = `<div class="ttl"><div><b>Buscar hipódromo</b><div class="sub">Internacionales del ${new Date(D.fecha + 'T12:00').toLocaleDateString('es-VE', {day:'numeric', month:'long'})}</div></div></div>
+        <input id="qPista" type="search" placeholder="Nombre del hipódromo" autocomplete="off" style="width:100%;margin-top:10px;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px">
+        <div id="lPista"></div>`;
+      $('#qPista').oninput = e => { qq = e.target.value; sheetFn(); };
+    }
+    $('#lPista').innerHTML = body;
+  };
+  sheetFn(); $('#sheet').className = 'sheet on'; setTimeout(() => $('#qPista')?.focus(), 150);
+}
 function render(){
+  if (!D) return;
   const live = D.modo === 'vivo';
   $('#dot').className = 'dot ' + (D.error ? 'err' : live ? 'live' : '');
   const dia = new Date(D.fecha + 'T12:00').toLocaleDateString('es-VE', {weekday:'long', day:'numeric', month:'long'});
   $('#estado').textContent = D.error ? 'Error de conexión con ondrv' : live ? `${dia} · actualizado ${hhmm(D.actualizado, true)}` : `${dia} · ${hhmm(D.ahora)}`;
   if (!live && D.rango){ $('#replay').hidden = false; const s = $('#slider'); if (+s.max !== D.rango[1]) { s.min = D.rango[0] - 60000; s.max = D.rango[1]; s.step = 1000; if (!hasta) s.value = s.max; } }
   $('#centroSel').innerHTML = CENTROS.map(c=>`<button class="${c===centro?'on':''}" onclick="setCentro('${c}')">${c}</button>`).join('');
-  $('#ttl').textContent = centro === 'Ambos' ? 'La Rinconada' : centro === 'The Book' ? 'The Book' : 'La Rinconada · Hipódromo';
+  pintarFiltros();
+  $('#ttl').textContent = nombrePista(pista) + (centro === 'Ambos' ? '' : ' · ' + centro);
   const altas = alertasC().filter(a => a.nivel === 'alta').length;
   $('#navBadge').hidden = !altas; $('#navBadge').textContent = altas > 99 ? '99+' : altas;
   ({resumen:rResumen, carreras:rCarreras, alertas:rAlertas, taquillas:rTaquillas})[view]();
@@ -207,7 +255,7 @@ function notify(){
   if (seen && D.modo === 'vivo' || seen && playing) {
     const nuevas = alertasC().filter(a => a.nivel==='alta' && !seen.has(a.tipo+a.ticket+a.uid+a.carrera));
     if (nuevas.length){ const a = nuevas[0];
-      $('#toast').innerHTML = `<b>${esc(a.tipo)}${a.carrera?' · C'+a.carrera:''}</b><div class="sub" style="color:var(--alta)">${esc(a.taquilla||'')} · ${esc(a.detalle)}</div>${nuevas.length>1?`<div class="sub">y ${nuevas.length-1} más</div>`:''}`;
+      $('#toast').innerHTML = `<b>${esc(a.tipo)}${a.carrera?' · '+esc(a.carreraTxt||'C'+a.carrera):''}</b><div class="sub" style="color:var(--alta)">${esc(a.taquilla||'')} · ${esc(a.detalle)}</div>${nuevas.length>1?`<div class="sub">y ${nuevas.length-1} más</div>`:''}`;
       $('#toast').className = 'toast on'; clearTimeout(window._tt); window._tt = setTimeout(()=>$('#toast').className='toast', 6000);
       if (navigator.vibrate) navigator.vibrate([120,60,120]);
     }
@@ -225,8 +273,8 @@ function rResumen(){
       <div class="sub">vendido · ${fmt(t.tickets)} tickets</div><div class="sub">premios ${short(t.premios)}</div>
       <div class="gan ${g < 0 ? 'neg' : 'pos'}">${g > 0 ? '+' : ''}${short(g)}<small>${t.ventas ? Math.round(g / t.ventas * 100) : 0} %</small></div>
       ${t.anulados ? `<div class="sub" style="margin-top:4px">anulado ${short(t.anulado)} (${t.anulados})</div>` : ''}</div>`; };
-  const cs = [...D.carreras].sort((a,b)=>a.carrera-b.carrera), ahora = cs.find(c => !c.cerrada) || cs[cs.length-1];
-  const strip = cs.length ? `<div class="strip">${cs.map(c => `<button class="${c === ahora ? 'now' : c.cerrada ? 'done' : ''}" onclick="race=${c.carrera};go('carreras')">C${c.carrera} ${c.postTime}</button>`).join('')}</div>` : '';
+  const cs = D.carreras, ahora = cs.find(c => !c.cerrada) || cs[cs.length-1];
+  const strip = cs.length ? `<div class="strip">${cs.map(c => `<button class="${c === ahora ? 'now' : c.cerrada ? 'done' : ''}" onclick="race='${esc(c.carrera)}';go('carreras')">${esc(c.etiqueta)} ${c.postTime}</button>`).join('')}</div>` : '';
   const alS = {}; alertasC().forEach(a => { if (a.nivel==='alta') alS[a.sector] = (alS[a.sector]||0)+1; });
   const secs = Object.entries(D.sectores).filter(([s]) => inC(s)).filter(([,v]) => v.BS.tickets+v.USD.tickets+v.BS.anulados+v.USD.anulados);
   const top = alertasC().filter(a => a.nivel==='alta').slice(0,3);
@@ -237,9 +285,10 @@ function rResumen(){
     const tbl = c => `<div class="card cur ${c}"><span class="tag">${c}</span><table class="cmp" style="margin-top:6px"><tr><th>Centro</th><th>Ventas</th><th>Ganancia</th><th>Margen</th><th>Tickets</th></tr>${row('Hipódromo',H,c)}${row('The Book',B,c)}</table>
       <div class="sbar" style="margin-top:10px"><i style="width:${(H[c].ventas/((H[c].ventas+B[c].ventas)||1))*100}%;background:var(--accent)"></i><i style="flex:1;background:${SC['The Book']}"></i></div>
       <div class="sub" style="margin-top:4px">Hipódromo ${Math.round(H[c].ventas/((H[c].ventas+B[c].ventas)||1)*100)} % · The Book ${Math.round(B[c].ventas/((H[c].ventas+B[c].ventas)||1)*100)} % de la venta</div></div>`;
-    cmp = `<h2>Hipódromo contra The Book</h2><div class="two wide">${tbl('BS')}${tbl('USD')}</div>`;
+    const cs2 = ['BS','USD'].filter(c => H[c].tickets + B[c].tickets);
+    cmp = cs2.length ? `<h2>Hipódromo contra The Book</h2><div class="two wide">${cs2.map(tbl).join('')}</div>` : '';
   }
-  $('#v-resumen').innerHTML = `${strip}<div class="two">${['BS','USD'].filter(c => centro==='Ambos' || T[c].tickets || T[c].anulados).map(cur).join('') || '<div class="empty">Sin ventas todavía.</div>'}</div>${cmp}
+  $('#v-resumen').innerHTML = `${strip}<div class="two">${['BS','USD'].filter(c => T[c].tickets || T[c].anulados).map(cur).join('') || '<div class="empty">Sin ventas todavía.</div>'}</div>${cmp}
     <h2>Por sector</h2>${secs.map(([s,v]) => { const gb=v.BS.ventas-v.BS.premios, gu=v.USD.ventas-v.USD.premios;
       return `<div class="card sect" onclick="fSect='${s}';go('taquillas')"><div class="sw" style="background:${SC[s]}"></div>
       <div style="flex:1"><div style="display:flex;justify-content:space-between"><span class="nm">${s}</span>${alS[s]?`<span class="badge">${alS[s]}</span>`:''}</div>
@@ -250,9 +299,9 @@ function rResumen(){
 
 // ---------- Carreras ----------
 function rCarreras(){
-  const cs = [...D.carreras].sort((a,b)=>a.carrera-b.carrera);
-  if (!cs.length){ $('#v-carreras').innerHTML = '<div class="empty">No hay carreras de La Rinconada hoy.</div>'; return; }
-  if (race == null || !cs.find(c=>c.carrera===race)){ const nx = cs.find(c=>c.minutos >= -2); race = (nx || cs[cs.length-1]).carrera; }
+  const cs = D.carreras;
+  if (!cs.length){ $('#v-carreras').innerHTML = `<div class="empty">${pista==='INTL'||pista==='TODO'?'No hay carreras internacionales con jugada este día.':'No hay carreras de '+esc(nombrePista(pista))+' este día.'}</div>`; return; }
+  if (race == null || !cs.find(c=>c.carrera===race)){ const nx = D.modo === 'vivo' ? cs.find(c=>c.minutos >= -2) : cs.find(c=>D.races[c.carrera]); race = (nx || cs[cs.length-1]).carrera; }
   const c = cs.find(x=>x.carrera===race), R0 = D.races[race];
   let R = null;
   if (R0) { R = {...R0, BS:blank(), USD:blank(), caballos:{}};
@@ -261,16 +310,16 @@ function rCarreras(){
     R.tardias = alertasC().filter(a=>a.tipo==='Venta tardía'&&a.carrera===race).length;
     if (!Object.keys(R.caballos).length) R = null; }
   const lbl = c => c.cerrada ? (c.closeMs ? `cerró a +${Math.round((c.closeMs-c.postMs)/1000)} s` : 'cerrada') : c.minutos > 0 ? `en ${c.minutos} min` : `abierta, ${-c.minutos} min pasada la hora`;
-  let h = `<div class="chips" id="raceChips">${cs.map(x=>`<button class="chip ${x.carrera===race?'on':''}" onclick="race=${x.carrera};rCarreras()">C${x.carrera}<small>${x.postTime}</small>${D.races[x.carrera]?.tardias?'<span class="rd"></span>':''}</button>`).join('')}</div>`;
-  h += `<div class="racehd"><div><b style="font-size:18px">Carrera ${race}</b> <span class="sub">${c.postTime} · ${lbl(c)}</span></div>${R?.tardias?`<span class="badge" onclick="fAl='Venta tardía';go('alertas')">${R.tardias} tardías</span>`:''}</div>`;
+  let h = `<div class="chips" id="raceChips">${cs.map(x=>`<button class="chip ${x.carrera===race?'on':''}" onclick="race='${esc(x.carrera)}';rCarreras()">${esc(x.etiqueta)}<small>${x.postTime}</small>${D.races[x.carrera]?.tardias?'<span class="rd"></span>':''}</button>`).join('')}</div>`;
+  h += `<div class="racehd"><div><b style="font-size:18px">Carrera ${c.numero}</b> <span class="sub">${pista==='RINCONADA'?'':esc(c.hipodromo)+' · '}${c.postTime} · ${lbl(c)}</span></div>${R?.tardias?`<span class="badge" onclick="fAl='Venta tardía';go('alertas')">${R.tardias} tardías</span>`:''}</div>`;
   if (!R){ $('#v-carreras').innerHTML = h + '<div class="empty">Sin jugadas todavía.</div>'; keepChip(); return; }
   h += `<div class="two">${['BS','USD'].filter(k => R[k].tickets || R[k].anulados).map(k => `<div class="card cur ${k}"><span class="tag">${k}</span> <b>${fmt(R[k].ventas)}</b> <span class="sub">· ${R[k].tickets} tickets</span></div>`).join('')}</div>`;
   h += `<div class="legend">${Object.entries(SC).filter(([s])=>s!=='Otros'&&inC(s)).map(([s,c])=>`<span style="--c:${c}">${s}</span>`).join('')}</div>`;
-  const hs = Object.values(R.caballos).sort((a,b)=>(b.BS.ventas/(R.BS.ventas||1)+b.USD.ventas/(R.USD.ventas||1))-(a.BS.ventas/(R.BS.ventas||1)+a.USD.ventas/(R.USD.ventas||1)));
+  const hs = Object.values(R.caballos).sort((a,b)=>(a.caballo==='Comb.')-(b.caballo==='Comb.')||(b.BS.ventas/(R.BS.ventas||1)+b.USD.ventas/(R.USD.ventas||1))-(a.BS.ventas/(R.BS.ventas||1)+a.USD.ventas/(R.USD.ventas||1)));
   const lim = D.alertas.length ? 50 : 50;
   h += hs.map(x => { const pb = R.BS.ventas? x.BS.ventas/R.BS.ventas*100:0, pu = R.USD.ventas? x.USD.ventas/R.USD.ventas*100:0;
     const seg = Object.entries(x.porSector).map(([s,v]) => [s,(R.BS.ventas? v.BS.ventas/R.BS.ventas:0)+(R.USD.ventas? v.USD.ventas/R.USD.ventas:0)]); const sum = seg.reduce((a,[,v])=>a+v,0)||1;
-    return `<div class="card horse ${Math.max(pb,pu)>=lim?'hot':''}" onclick="openHorse('${esc(x.caballo)}')"><div class="n">${esc(x.caballo)}</div><div>
+    return `<div class="card horse ${x.caballo!=='Comb.'&&Math.max(pb,pu)>=lim?'hot':''}" onclick="openHorse('${esc(x.caballo)}')"><div class="n ${x.caballo==='Comb.'?'comb':''}">${esc(x.caballo)}</div><div>
       <div class="amts"><div><span class="amt bs">${short(x.BS.ventas)}</span><span class="pc">${pb.toFixed(0)}%</span><div class="bar"><i style="width:${pb}%;background:var(--bs)"></i></div></div>
       <div><span class="amt usd">${short(x.USD.ventas)}</span><span class="pc">${pu.toFixed(0)}%</span><div class="bar"><i style="width:${pu}%;background:var(--usd)"></i></div></div></div>
       <div class="sbar">${seg.map(([s,v])=>`<i style="width:${v/sum*100}%;background:${SC[s]}"></i>`).join('')}</div>
@@ -289,7 +338,7 @@ function openHorse(cab){
       .sort((a,b)=>(b[1].BS.ventas/tb+b[1].USD.ventas/tu)-(a[1].BS.ventas/tb+a[1].USD.ventas/tu));
     const tq = Object.values(H0.porTaquilla).filter(t=>inC(t.sector)).sort((a,b)=>b.ventas/(b.moneda==='BS'?tb:tu)-a.ventas/(a.moneda==='BS'?tb:tu));
     const head = `<div class="hrow"><span></span><span class="bs">BS</span><span class="usd">USD</span></div>`;
-    $('#sheetBody').innerHTML = `<div class="ttl"><div><b>Caballo #${esc(cab)}</b><div class="sub">Carrera ${race}${centro==='Ambos'?'':' · '+centro}</div></div></div>
+    $('#sheetBody').innerHTML = `<div class="ttl"><div><b>${cab==='Comb.'?'Combinadas (exacta, trifecta…)':'Caballo #'+esc(cab)}</b><div class="sub">${esc(R0.pista==='RINCONADA'?'La Rinconada':(D.carreras.find(c=>c.carrera===race)?.hipodromo||R0.pista))} · carrera ${R0.numero}${centro==='Ambos'?'':' · '+centro}</div></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><div class="card cur BS" style="margin:0"><span class="tag">BS</span> <b>${fmt(H.BS.ventas)}</b><div class="sub">${H.BS.tickets} tickets${H.BS.premios?` · pagó ${fmt(H.BS.premios)}`:''}</div></div>
       <div class="card cur USD" style="margin:0"><span class="tag">USD</span> <b>${fmt(H.USD.ventas)}</b><div class="sub">${H.USD.tickets} tickets${H.USD.premios?` · pagó ${fmt(H.USD.premios)}`:''}</div></div></div>
       <h2>Por sector</h2>${head}${sec.map(([s,v])=>`<div class="hrow"><span><span style="color:${SC[s]}">■</span> ${s}</span><span>${cell(v.BS,tb,'bs')}</span><span>${cell(v.USD,tu,'usd')}</span></div>`).join('') || '<div class="empty">Sin jugadas</div>'}
@@ -303,7 +352,7 @@ function closeSheet(){ $('#sheet').className = 'sheet'; sheetFn = null; }
 
 // ---------- Alertas ----------
 function alCard(a){
-  return `<div class="card al ${a.nivel}"><div class="t"><span>${esc(a.tipo)}${a.carrera?` · C${a.carrera}`:''}</span><span class="h">${hhmm(a.hora, true)}</span></div>
+  return `<div class="card al ${a.nivel}"><div class="t"><span>${esc(a.tipo)}${a.carrera?` · ${esc(a.carreraTxt||'C'+a.carrera)}`:''}</span><span class="h">${hhmm(a.hora, true)}</span></div>
     <div>${a.taquilla&&a.taquilla!=='—'?esc(a.taquilla):''}${a.sector&&a.sector!=='—'?` · <span style="color:${SC[a.sector]}">${a.sector}</span>`:''}${a.jugada?` · ${esc(a.jugada)}`:''}${a.monto!=null?` · <b>${fmt(a.monto)} ${a.moneda}</b>`:''}</div>
     <div class="d">${esc(a.detalle)}</div>${a.revisado?`<div class="d" style="color:var(--bs)">✅ Revisado por ${esc(a.revisado.quien)} · ${hhmm(a.revisado.hora)}</div>`:''}${a.silenciada?'<div class="d">🔕 Taquilla silenciada</div>':''}</div>`;
 }
@@ -442,6 +491,7 @@ async function mover(uid, sector){ await fetch('/api/sector',{method:'POST',head
 // ---------- navegación y refresco ----------
 function go(v){ view = v; document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on', b.dataset.v===v)); document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on', x.id==='v-'+v)); closeSheet(); if (D) render(); window.scrollTo(0,0); }
 $('#nav').onclick = e => { const b = e.target.closest('button'); if (b) go(b.dataset.v); };
+$('#fechaSel').onchange = e => { if (e.target.value) setFecha(e.target.value); };
 $('#slider').oninput = e => { hasta = +e.target.value; load(); };
 $('#play').onclick = () => { playing = !playing; $('#play').textContent = playing ? '❚❚' : '▶'; if (playing && +$('#slider').value >= +$('#slider').max) { hasta = +$('#slider').min; } };
 setInterval(() => { if (!playing || !D || D.modo !== 'repeticion') return; const s = $('#slider'); hasta = Math.min(+s.max, (hasta || +s.min) + 3000 * +$('#speed').value); s.value = hasta; if (hasta >= +s.max) { playing = false; $('#play').textContent = '▶'; } load(); }, 3000);
