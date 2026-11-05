@@ -139,7 +139,7 @@ nav .badge{position:absolute;top:7px;left:calc(50% + 6px)}
 <div class="top">
   <div class="brand"><img src="logo.png" alt="King Horse"><div class="tt"><h1 id="ttl">La Rinconada</h1><span id="estado">cargando…</span></div><span class="dot" id="dot"></span></div>
   <div class="topin">
-  <div class="filtros"><div class="seg" id="pistaSeg"></div><button class="lupa" onclick="buscarPista()" aria-label="Buscar hipódromo"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button></div>
+  <div class="filtros"><div class="seg" id="pistaSeg"></div><button class="lupa" onclick="buscarPista()" aria-label="Buscar hipódromo"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button><button class="lupa" onclick="abrirReporte()" aria-label="Exportar reporte"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14l3 3 3-3"/></svg></button></div>
   <div class="centro"><div class="seg" id="centroSel"></div><input type="date" id="fechaSel" aria-label="Fecha"></div>
   <div class="replay" id="replay" hidden>
     <button id="play">▶</button>
@@ -210,9 +210,48 @@ function pintarFiltros(){
   const una = !PISTA_TXT[pista];
   $('#pistaSeg').innerHTML = `<button class="${pista==='RINCONADA'?'on':''}" onclick="setPista('RINCONADA')">Rinconada</button>`
     + (una ? `<button class="on" onclick="setPista('INTL')" title="Volver a todos los internacionales">${esc(nombrePista(pista))} ✕</button>`
-           : `<button class="${pista==='INTL'?'on':''}" onclick="setPista('INTL')">Internacional</button>`)
+           : `<button class="${pista==='INTL'?'on':''}" onclick="setPista('INTL')">Internac.</button>`)
     + `<button class="${pista==='TODO'?'on':''}" onclick="setPista('TODO')">Todo</button>`;
 }
+// ---------- reportes en Excel o PDF ----------
+const isoVE = (d = 0) => new Date(Date.now() - 4 * 3600e3 + d * 86400e3).toISOString().slice(0, 10);
+function abrirReporte(){
+  const hoy = D?.hoy || isoVE(), base = D?.fecha || hoy;
+  const RP = { desde: base, hasta: base, pista: pista === 'RINCONADA' ? 'RINCONADA' : pista === 'TODO' ? 'TODO' : 'INTL', ocupado: false, error: '' };
+  const lunes = () => { const d = new Date(hoy + 'T12:00Z'); d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7); return d.toISOString().slice(0, 10); };
+  const mes = (m) => { const d = new Date(hoy + 'T12:00Z'); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + m); const ini = d.toISOString().slice(0, 10); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0); const fin = d.toISOString().slice(0, 10); return [ini, fin > hoy ? hoy : fin]; };
+  const rapidos = { 'Hoy': [hoy, hoy], 'Ayer': [isoVE(-1), isoVE(-1)], 'Esta semana': [lunes(), hoy], 'Este mes': mes(0), 'Mes pasado': mes(-1) };
+  window._rp = RP; window._rpRapido = k => { [RP.desde, RP.hasta] = rapidos[k]; pintar(); };
+  window._rpPista = p => { RP.pista = p; pintar(); };
+  window._rpBajar = async fmt => {
+    if (RP.ocupado) return; RP.desde = $('#rpDesde').value; RP.hasta = $('#rpHasta').value; RP.error = '';
+    if (!RP.desde || !RP.hasta) { RP.error = 'Elige las dos fechas.'; return pintar(); }
+    RP.ocupado = fmt; pintar();
+    try {
+      const r = await fetch(`/api/reporte?${new URLSearchParams({ desde: RP.desde, hasta: RP.hasta, pista: RP.pista, formato: fmt })}`);
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Error ' + r.status);
+      const nombre = (/filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '') || [])[1] || 'reporte.' + fmt;
+      const url = URL.createObjectURL(await r.blob()), a = document.createElement('a');
+      a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { RP.error = e.message; }
+    RP.ocupado = false; pintar();
+  };
+  const dias = () => Math.round((new Date(RP.hasta) - new Date(RP.desde)) / 86400e3) + 1;
+  function pintar(){
+    const P = { RINCONADA: 'Rinconada', INTL: 'Internacionales', TODO: 'Ambas' };
+    $('#sheetBody').innerHTML = `<div class="ttl"><div><b>Exportar reporte</b><div class="sub">Ventas, premios y ganancia por día, hipódromo, sector y taquilla</div></div></div>
+      <h2>Fechas</h2><div class="chips">${Object.keys(rapidos).map(k => `<button class="chip ${rapidos[k][0]===RP.desde&&rapidos[k][1]===RP.hasta?'on':''}" onclick="_rpRapido('${k}')">${k}</button>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label class="sub">Desde<input id="rpDesde" type="date" value="${RP.desde}" max="${hoy}" onchange="_rp.desde=this.value" style="width:100%;font:inherit;padding:9px;border:1px solid var(--line);border-radius:10px;margin-top:4px"></label>
+      <label class="sub">Hasta<input id="rpHasta" type="date" value="${RP.hasta}" max="${hoy}" onchange="_rp.hasta=this.value" style="width:100%;font:inherit;padding:9px;border:1px solid var(--line);border-radius:10px;margin-top:4px"></label></div>
+      <h2>Hipódromos</h2><div class="seg" style="display:flex">${Object.entries(P).map(([k, t]) => `<button style="flex:1;white-space:nowrap" class="${RP.pista===k?'on':''}" onclick="_rpPista('${k}')">${t}</button>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px">
+        <button style="background:#1D6F42;color:#fff;border:0;padding:12px" onclick="_rpBajar('xlsx')" ${RP.ocupado?'disabled':''}>${RP.ocupado==='xlsx'?'Preparando…':'Excel'}</button>
+        <button style="background:#B3261E;color:#fff;border:0;padding:12px" onclick="_rpBajar('pdf')" ${RP.ocupado?'disabled':''}>${RP.ocupado==='pdf'?'Preparando…':'PDF'}</button></div>
+      ${RP.error ? `<div class="d" style="color:var(--alta);margin-top:10px">${esc(RP.error)}</div>` : `<div class="sub" style="margin-top:10px">${RP.ocupado && dias() > 7 ? `Son ${dias()} días: puede tardar un minuto.` : 'Hasta 93 días por reporte.'}</div>`}`;
+  }
+  sheetFn = null; pintar(); $('#sheet').className = 'sheet on';
+}
+
 // buscador de un hipódromo internacional
 function buscarPista(){
   let qq = '';

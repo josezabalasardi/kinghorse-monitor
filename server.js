@@ -5,6 +5,7 @@ const path = require('path');
 
 const ia = require('./ia');
 const acceso = require('./auth');
+const reportes = require('./reportes');
 
 // Administración de usuarios desde la consola:
 //   node server.js --usuario <usuario> <clave> [nombre]   crea o cambia la clave
@@ -448,6 +449,24 @@ setInterval(() => {
   if ((process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) && ve.getUTCHours() === 23 && IA.ultimoDia !== dia && !FIXED_DATE) { IA.ultimoDia = dia; correrIA(); }
 }, 5 * 60e3);
 
+// ---------- reportes ----------
+const cerradoHasta = () => new Date(Date.now() - 4 * 3600e3 - 2 * 86400e3).toISOString().slice(0, 10);
+const ctxReporte = () => ({ cerradoHasta: cerradoHasta(), dia: f => f === S.date ? Promise.resolve(S) : diaPasado(f),
+  esNacional, moneda: uid => S.taquillas[uid]?.moneda || 'USD', sector: sectorOf, nombre: nameOf });
+// en segundo plano deja resumidos los últimos 93 días cerrados, uno por uno, para que los reportes salgan al instante
+async function calentarReportes() {
+  if (FIXED_DATE) return;
+  const hasta = cerradoHasta(), desde = new Date(Date.now() - 4 * 3600e3 - 94 * 86400e3).toISOString().slice(0, 10);
+  let n = 0;
+  for (const f of reportes.fechas(desde, hasta).reverse()) {
+    if (fs.existsSync(path.join(__dirname, 'reportes-cache', f + '.json'))) continue;
+    try { await reportes.resumenDia(f, ctxReporte()); n++; DIAS.delete(f); } catch (e) { console.error('reportes', f, e.message); }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  if (n) console.log(`reportes: ${n} días resumidos`);
+}
+setTimeout(calentarReportes, 2 * 60e3); setInterval(calentarReportes, 6 * 3600e3);
+
 // ---------- servidor ----------
 const send = (res, code, body, type = 'application/json') => { res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store' }); res.end(type === 'application/json' ? JSON.stringify(body) : body); };
 if (BACKFILL) { descargarHistorial(BACKFILL).then(() => { console.log('Historial listo'); process.exit(0); }); return; }
@@ -483,6 +502,19 @@ http.createServer(async (req, res) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || fecha > today()) return send(res, 400, { error: 'Fecha inválida' });
       try { return send(res, 200, snapshot(hasta, await diaPasado(fecha), pista)); }
       catch (e) { return send(res, 502, { error: 'No se pudo cargar ese día de ondrv: ' + e.message }); }
+    }
+    if (u.pathname === '/api/reporte') {
+      const q = { desde: u.searchParams.get('desde'), hasta: u.searchParams.get('hasta') || u.searchParams.get('desde'), pista: (u.searchParams.get('pista') || 'TODO').toUpperCase() };
+      const formato = u.searchParams.get('formato') === 'pdf' ? 'pdf' : 'xlsx';
+      try { reportes.validar(q, today()); } catch (e) { return send(res, 400, { error: e.message }); }
+      try {
+        const R = await reportes.armar(q, ctxReporte());
+        const buf = formato === 'pdf' ? await reportes.pdf(R) : Buffer.from(await reportes.excel(R));
+        console.log(`reporte ${formato} ${q.pista} ${q.desde}..${q.hasta} por ${req.sesion?.nombre || '-'}`);
+        res.writeHead(200, { 'Content-Type': formato === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${reportes.nombreArchivo(R, formato)}"`, 'Cache-Control': 'no-store' });
+        return res.end(buf);
+      } catch (e) { console.error('reporte', e); return send(res, 502, { error: 'No se pudo armar el reporte: ' + e.message }); }
     }
     if (u.pathname === '/api/config' && req.method === 'GET') return send(res, 200, { alertas: CFG.alertas, telegram: { activo: !!TG_TOKEN, niveles: CFG.telegram.niveles, suscriptores: Object.keys(TG.chats).length } });
     if (u.pathname === '/api/config' && req.method === 'POST') {

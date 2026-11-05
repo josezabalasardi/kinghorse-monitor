@@ -27,7 +27,7 @@ NODE="$DIR/node/bin/node"; NPM="$DIR/node/bin/npm"
 # 2. Usuario de sistema y archivos (conserva datos, usuarios y configuración si ya existían)
 id monitorkh >/dev/null 2>&1 || useradd --system --home "$DIR" --shell /usr/sbin/nologin monitorkh
 mkdir -p "$DIR/app"
-for f in server.js ia.js auth.js package.json package-lock.json LEEME.md; do cp "$ORIGEN/$f" "$DIR/app/"; done
+for f in server.js ia.js auth.js reportes.js package.json package-lock.json LEEME.md; do cp "$ORIGEN/$f" "$DIR/app/"; done
 [ -f "$ORIGEN/actualizar.sh" ] && [ "$ORIGEN/actualizar.sh" != "$DIR/actualizar.sh" ] && cp "$ORIGEN/actualizar.sh" "$DIR/actualizar.sh"
 rm -rf "$DIR/app/public"; cp -r "$ORIGEN/public" "$DIR/app/public"
 [ -f "$DIR/app/config.json" ] || cp "$ORIGEN/config.json" "$DIR/app/"
@@ -93,6 +93,13 @@ systemctl restart $SVC
 sleep 3
 systemctl is-active --quiet $SVC && echo "-- Servicio activo en el puerto $PORT" || { journalctl -u $SVC -n 30 --no-pager; exit 1; }
 
+# los reportes de muchos días tardan más de un minuto: si ya hay nginx configurado, le da hasta 5 minutos
+NGX=/etc/nginx/sites-available/$SVC
+if [ -f "$NGX" ] && ! grep -q proxy_read_timeout "$NGX"; then
+  sed -i 's|proxy_set_header X-Forwarded-Proto \$scheme;|&\n    proxy_read_timeout 300s;|' "$NGX"
+  if nginx -t 2>/dev/null; then systemctl reload nginx; echo "-- nginx: tiempo de espera de 5 minutos para los reportes"; else echo "!! No se pudo ajustar nginx"; fi
+fi
+
 # 6. Publicarlo con HTTPS en un subdominio (opcional)
 if [ -n "${DOMINIO:-}" ]; then
   # En un servidor nuevo instala nginx y certbot; si el puerto 80 ya lo usa otro programa, no toca nada
@@ -121,6 +128,7 @@ server {
     proxy_set_header Host \$host;
     proxy_set_header X-Forwarded-For \$remote_addr;
     proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_read_timeout 300s;
   }
 }
 EOF

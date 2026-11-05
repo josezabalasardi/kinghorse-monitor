@@ -4,6 +4,8 @@ Pensado para el teléfono: pestañas abajo (Resumen, Carreras, Alertas, Taquilla
 
 Arriba se elige qué mirar: **Rinconada**, **Internacional** (todos los hipódromos internacionales juntos) o **Todo**. La lupa abre un buscador para ver un solo hipódromo internacional. Al lado del selector Hipódromo / The Book / Ambos está la **fecha**: cualquier día pasado se abre en modo repetición, con la barra de tiempo.
 
+El botón de documento (al lado de la lupa) **exporta reportes en Excel o PDF** para un rango de fechas (hasta 93 días): La Rinconada, internacionales o ambas. Traen totales en BS y USD, y el detalle por día, por hipódromo, por sector y por taquilla. Los días ya cerrados se guardan resumidos en `reportes-cache/`, así que un mes sale al instante; el servidor los va preparando solo en segundo plano.
+
 Lee los datos de ondrv (solo lectura) y muestra:
 - Balance del día con **BS y USD lado a lado**.
 - Ventas y ganancia **por sector** (Sportbook, Tribuna A, B, C, Jockey Club, The Book). Al tocar un sector se abren sus taquillas.

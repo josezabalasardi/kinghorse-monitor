@@ -7,3 +7,4 @@ sectores.json
 *.log
 *.bak
 .env
+reportes-cache/
