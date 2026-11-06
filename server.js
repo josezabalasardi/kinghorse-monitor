@@ -8,13 +8,13 @@ const acceso = require('./auth');
 const reportes = require('./reportes');
 
 // Administración de usuarios desde la consola:
-//   node server.js --usuario <usuario> <clave> [nombre]   crea o cambia la clave
+//   node server.js --usuario <usuario> <clave> [nombre]   crea o cambia la clave (agrega --supervisor para ese rol)
 //   node server.js --quitar-usuario <usuario>
 //   node server.js --usuarios                             lista
 {
   const a = process.argv, i = a.indexOf('--usuario');
   try {
-    if (i > 0) { acceso.crear(a[i + 1], a[i + 2], a.slice(i + 3).join(' ')); console.log('Usuario guardado:', a[i + 1]); process.exit(0); }
+    if (i > 0) { const sup = a.includes('--supervisor'); acceso.crear(a[i + 1], a[i + 2], a.slice(i + 3).filter(x => x !== '--supervisor').join(' '), sup ? 'supervisor' : undefined); console.log('Usuario guardado:', a[i + 1]); process.exit(0); }
     if (a.includes('--quitar-usuario')) { acceso.quitar(a[a.indexOf('--quitar-usuario') + 1]); console.log('Usuario quitado'); process.exit(0); }
     if (a.includes('--usuarios')) { console.table(acceso.lista()); process.exit(0); }
   } catch (e) { console.error(e.message); process.exit(1); }
@@ -490,12 +490,43 @@ http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/salir') { res.setHeader('Set-Cookie', acceso.cookie(req, '', 0)); return send(res, 200, { ok: true }); }
     if (u.pathname === '/login') { res.writeHead(302, { Location: '/login.html' }); return res.end(); }
-    req.sesion = ABIERTO ? { usuario: 'local', nombre: 'local' } : acceso.leer(req);
+    req.sesion = ABIERTO ? { usuario: 'local', nombre: 'local', rol: process.env.MONITOR_ROL || 'gerente' } : acceso.leer(req);
     if (!req.sesion && !PUBLICAS.has(u.pathname)) {
       if (u.pathname.startsWith('/api/')) return send(res, 401, { error: 'Inicia sesión' });
       res.writeHead(302, { Location: '/login.html' }); return res.end();
     }
     if (u.pathname === '/api/yo') return send(res, 200, req.sesion);
+    // cada usuario cambia su propia clave; se le renueva la sesión en este teléfono y se cierran las demás
+    if (u.pathname === '/api/mi-clave' && req.method === 'POST') {
+      let b = ''; for await (const c of req) { b += c; if (b.length > 2000) break; }
+      let d = {}; try { d = JSON.parse(b); } catch {}
+      const ip = ipDe(req);
+      if (acceso.bloqueado(ip)) return send(res, 429, { error: 'Demasiados intentos. Espera 15 minutos.' });
+      if (!acceso.verificar(req.sesion.usuario, d.actual)) { acceso.fallo(ip); return send(res, 400, { error: 'La clave actual no es correcta' }); }
+      if (d.nueva === d.actual) return send(res, 400, { error: 'La clave nueva tiene que ser distinta' });
+      try { acceso.crear(req.sesion.usuario, d.nueva); } catch (e) { return send(res, 400, { error: e.message }); }
+      console.log(`usuarios: ${req.sesion.usuario} cambió su clave`);
+      res.setHeader('Set-Cookie', acceso.cookie(req, acceso.token(req.sesion.usuario), acceso.DIAS * 86400));
+      return send(res, 200, { ok: true });
+    }
+    // el supervisor ve todo, revisa alertas y saca reportes; cambiar configuración, sectores, umbrales, reglas o usuarios es del gerente
+    const SOLO_GERENTE = new Set(['/api/config', '/api/sugerencias/analizar', '/api/sugerencias/accion', '/api/reglas/quitar', '/api/umbral', '/api/sector', '/api/usuarios']);
+    if (req.sesion?.rol !== 'gerente' && SOLO_GERENTE.has(u.pathname) && (req.method === 'POST' || u.pathname === '/api/usuarios'))
+      return send(res, 403, { error: 'Solo un gerente puede hacer esto' });
+    if (u.pathname === '/api/usuarios' && req.method === 'GET') return send(res, 200, { yo: req.sesion.usuario, usuarios: acceso.lista() });
+    if (u.pathname === '/api/usuarios' && req.method === 'POST') {
+      let b = ''; for await (const c of req) { b += c; if (b.length > 4000) break; }
+      let d = {}; try { d = JSON.parse(b); } catch {}
+      try {
+        if (d.accion === 'crear') { if (acceso.lista().some(x => x.usuario === String(d.usuario || '').trim().toLowerCase())) throw new Error('Ese usuario ya existe'); acceso.crear(d.usuario, d.clave, d.nombre, d.rol, true); }
+        else if (d.accion === 'clave') { if (!acceso.lista().some(x => x.usuario === d.usuario)) throw new Error('No existe ese usuario'); acceso.crear(d.usuario, d.clave, undefined, undefined, true); }
+        else if (d.accion === 'editar') { if (d.usuario === req.sesion.usuario && d.rol && d.rol !== 'gerente') throw new Error('No puedes quitarte el rol de gerente a ti mismo'); acceso.editar(d.usuario, d); }
+        else if (d.accion === 'quitar') { if (d.usuario === req.sesion.usuario) throw new Error('No puedes quitarte a ti mismo'); acceso.quitar(d.usuario); }
+        else throw new Error('Acción inválida');
+        console.log(`usuarios: ${d.accion} ${d.usuario} por ${req.sesion.nombre}`);
+        return send(res, 200, { yo: req.sesion.usuario, usuarios: acceso.lista() });
+      } catch (e) { return send(res, 400, { error: e.message }); }
+    }
     if (u.pathname === '/api/estado') {
       const fecha = u.searchParams.get('fecha'), pista = (u.searchParams.get('pista') || NACIONAL).slice(0, 20), hasta = +u.searchParams.get('hasta') || null;
       if (!fecha || fecha === S.date) return send(res, 200, snapshot(hasta, S, pista));

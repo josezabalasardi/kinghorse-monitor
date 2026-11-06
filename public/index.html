@@ -133,6 +133,8 @@ nav .badge{position:absolute;top:7px;left:calc(50% + 6px)}
 .hrow{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);align-items:start}.hrow>span:not(:first-child){text-align:right}.hrow .s{color:var(--muted);font-size:11px}
 .toast{position:fixed;left:12px;right:12px;top:calc(10px + var(--safet));z-index:50;background:var(--altabg);color:var(--text);border:1px solid var(--alta);border-radius:12px;padding:10px 14px;display:none;max-width:736px;margin:0 auto;box-shadow:0 6px 20px #13244A33}
 .toast.on{display:block;animation:up .2s}
+body.sup .solo-gerente{display:none!important}
+.rol{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:#E4E9F2;color:var(--navy);text-transform:uppercase;letter-spacing:.03em}.rol.gerente{background:#F3E7C9;color:#7A5A12}
 </style>
 </head>
 <body>
@@ -171,7 +173,9 @@ nav .badge{position:absolute;top:7px;left:calc(50% + 6px)}
 const _fetch = window.fetch;
 window.fetch = async (...a) => { const r = await _fetch(...a); if (r.status === 401) location.href = '/login.html'; return r; };
 let YO = null;
-_fetch('/api/yo').then(r => r.ok ? r.json() : null).then(j => { YO = j; if (j?.nombre) try { localStorage.setItem('quien', j.nombre); } catch {} }).catch(() => {});
+const inp = 'width:100%;font:inherit;padding:9px;border:1px solid var(--line);border-radius:10px;margin-top:4px';
+const esGerente = () => !YO || YO.rol !== 'supervisor';
+_fetch('/api/yo').then(r => r.ok ? r.json() : null).then(j => { YO = j; document.body.classList.toggle('sup', !esGerente()); if (j?.debeCambiar) miClave(true); if (j?.nombre) try { localStorage.setItem('quien', j.nombre); } catch {} }).catch(() => {});
 async function salir(){ if (!confirm('¿Cerrar sesión?')) return; await _fetch('/api/salir'); location.href = '/login.html'; }
 const $ = s => document.querySelector(s);
 const SC = {'Sportbook':'#D4A21E','Tribuna A':'#2F6FD0','Tribuna B':'#23935F','Tribuna C':'#7B4CCB','Jockey Club':'#D2552F','The Book':'#13958F','Otros':'#7A8599'};
@@ -387,7 +391,7 @@ function openHorse(cab){
   };
   sheetFn(); $('#sheet').className = 'sheet on';
 }
-function closeSheet(){ $('#sheet').className = 'sheet'; sheetFn = null; }
+function closeSheet(){ if ($('#sheet').classList.contains('fija') && YO?.debeCambiar) return; $('#sheet').className = 'sheet'; sheetFn = null; }
 
 // ---------- Alertas ----------
 function alCard(a){
@@ -422,16 +426,16 @@ async function openIA(){
   sheetFn = null;
   const j = await (await fetch('/api/sugerencias')).json(); nSug = j.pendientes.length;
   $('#sheetBody').innerHTML = `<div class="ttl"><div><b>Sugerencias de la IA</b><div class="sub">${j.jornadas.length} días en el historial${j.jornadas.length?` · desde ${j.jornadas[0]}`:''}</div></div>
-      <button onclick="analizarIA(this)" ${!j.iaActiva||j.analizando?'disabled':''}>${j.analizando?'Analizando…':'Analizar ahora'}</button></div>
+      <button class="solo-gerente" onclick="analizarIA(this)" ${!j.iaActiva||j.analizando?'disabled':''}>${j.analizando?'Analizando…':'Analizar ahora'}</button></div>
     ${!j.iaActiva?'<div class="card" style="margin-top:10px">Falta conectar la clave de la IA. Mientras tanto el historial se sigue guardando cada jornada.</div>':''}
     ${j.error?`<div class="card" style="margin-top:10px;border-color:var(--alta)">${esc(j.error)}</div>`:''}
     <div class="sub" style="margin-top:8px">La IA revisa el historial cada noche a las 11 p. m. y propone qué vigilar. Tú decides: lo que apruebas pasa a ser una alerta; lo que descartas, con su motivo, le enseña qué no te interesa.</div>
     <h2>Para revisar (${j.pendientes.length})</h2>
     ${j.pendientes.map(sg=>`<div class="card al" style="border-left-color:${PRI[sg.prioridad]}"><div class="t"><span>${esc(sg.titulo)}</span><span class="h">prioridad ${sg.prioridad}</span></div>
       <div style="margin-top:4px">${esc(sg.explicacion)}</div><div class="d">📊 ${esc(sg.evidencia)}</div><div class="d">➜ ${esc(reglaTxt(sg.regla))}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button style="background:var(--pos);color:#fff;border-color:var(--pos);font-weight:600" onclick="accionIA('${sg.id}','aprobar')">Aprobar</button><button onclick="accionIA('${sg.id}','descartar')">Descartar</button></div></div>`).join('') || '<div class="sub">No hay sugerencias pendientes.</div>'}
+      <div class="solo-gerente" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button style="background:var(--pos);color:#fff;border-color:var(--pos);font-weight:600" onclick="accionIA('${sg.id}','aprobar')">Aprobar</button><button onclick="accionIA('${sg.id}','descartar')">Descartar</button></div></div>`).join('') || '<div class="sub">No hay sugerencias pendientes.</div>'}
     <h2>Reglas activas (${j.reglas.length})</h2>
-    ${j.reglas.map(r=>`<div class="li"><div>${esc(r.titulo)}<div class="s">${esc(reglaTxt(r.regla))}</div></div><button onclick="quitarRegla('${r.id}')">Quitar</button></div>`).join('') || '<div class="sub">Ninguna todavía.</div>'}
+    ${j.reglas.map(r=>`<div class="li"><div>${esc(r.titulo)}<div class="s">${esc(reglaTxt(r.regla))}</div></div><button class="solo-gerente" onclick="quitarRegla('${r.id}')">Quitar</button></div>`).join('') || '<div class="sub">Ninguna todavía.</div>'}
     ${j.revisadas.length?`<h2>Revisadas</h2>${j.revisadas.map(sg=>`<div class="li"><div>${sg.estado==='aprobada'?'✅':'✖️'} ${esc(sg.titulo)}<div class="s">${sg.quien?esc(sg.quien)+' · ':''}${sg.motivo?esc(sg.motivo):''}</div></div></div>`).join('')}`:''}`;
   $('#sheet').className = 'sheet on';
 }
@@ -460,15 +464,17 @@ let cfg = null;
 async function openConfig(){
   cfg = await (await fetch('/api/config')).json();
   sheetFn = null;
-  $('#sheetBody').innerHTML = `<div class="ttl"><b>Configurar alertas</b><button onclick="saveConfig()" style="background:var(--navy);color:#fff;border-color:var(--accent);font-weight:600">Guardar</button></div>
-    <div class="sub" style="margin:6px 0 4px">Los cambios aplican para todos los que usan el monitor.</div>
+  $('#sheetBody').innerHTML = `<div class="ttl"><b>Configurar alertas</b><button class="solo-gerente" onclick="saveConfig()" style="background:var(--navy);color:#fff;border-color:var(--accent);font-weight:600">Guardar</button></div>
+    <div class="sub" style="margin:6px 0 4px">${esGerente() ? 'Los cambios aplican para todos los que usan el monitor.' : 'Solo un gerente puede cambiar la configuración.'}</div>
+    ${esGerente() ? `<div class="card" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span><b>Usuarios</b><div class="sub">Gerentes y supervisores con acceso al monitor</div></span><button onclick="openUsuarios()">Administrar</button></div>` : ''}
     ${Object.entries(CONF).map(([k,c]) => `<div class="card" style="margin-top:10px"><label style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span><b>${c.t}</b><div class="sub">${c.d}</div></span>
       <input type="checkbox" data-k="${k}" data-f="activa" ${cfg.alertas[k].activa?'checked':''} style="width:24px;height:24px;accent-color:var(--accent)"></label>
       ${Object.entries(c.b||{}).map(([f,l]) => `<label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" data-k="${k}" data-f="${f}" ${cfg.alertas[k][f]?'checked':''} style="accent-color:var(--accent)"> ${l}</label>`).join('')}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">${Object.entries(c.f).map(([f,l]) => `<label class="l">${l}<input type="number" inputmode="decimal" data-k="${k}" data-f="${f}" value="${cfg.alertas[k][f]}" style="width:100%;margin-top:3px"></label>`).join('')}</div></div>`).join('')}
     <div class="card" style="margin-top:10px"><b>Telegram</b><div class="sub">${cfg.telegram.activo ? `Activo · ${cfg.telegram.suscriptores} suscritos` : 'Todavía no conectado'}</div>
       <div class="l" style="margin-top:8px">Enviar alertas de nivel</div><div style="display:flex;gap:14px;margin-top:4px">${['alta','media','baja'].map(n=>`<label><input type="checkbox" data-tg="${n}" ${cfg.telegram.niveles.includes(n)?'checked':''} style="accent-color:var(--accent)"> ${n}</label>`).join('')}</div></div>
-    <div class="card" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span><b>Sesión</b><div class="sub">${esc(YO?.nombre || '')}</div></span><button onclick="salir()">Cerrar sesión</button></div>`;
+    <div class="card" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span><b>Sesión</b><div class="sub">${esc(YO?.nombre || '')} <span class="rol ${YO?.rol||''}">${esc(YO?.rol || '')}</span></div></span><span style="display:flex;gap:6px"><button onclick="miClave()">Cambiar mi clave</button><button onclick="salir()">Cerrar sesión</button></span></div>`;
+  if (!esGerente()) document.querySelectorAll('#sheetBody input').forEach(i => i.disabled = true);
   $('#sheet').className = 'sheet on';
 }
 async function saveConfig(){
@@ -478,6 +484,65 @@ async function saveConfig(){
   await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({alertas: al, telegramNiveles: tgN})});
   closeSheet(); load();
 }
+
+// ---------- Mi clave ----------
+function miClave(obligatoria){
+  sheetFn = null;
+  $('#sheetBody').innerHTML = `<div class="ttl"><div><b>${obligatoria ? 'Crea tu clave' : 'Cambiar mi clave'}</b><div class="sub">${obligatoria ? `Hola ${esc(YO?.nombre || '')}. Tu clave te la dio un gerente: cámbiala por una que solo sepas tú.` : 'Al cambiarla se cierran tus sesiones en otros teléfonos.'}</div></div></div>
+    <div class="card" style="margin-top:10px"><label class="sub">Clave actual${obligatoria ? ' (la que te dieron)' : ''}<input id="mcA" type="password" autocomplete="current-password" style="${inp}"></label>
+    <label class="sub" style="display:block;margin-top:8px">Clave nueva (mínimo 6)<input id="mcN" type="password" autocomplete="new-password" style="${inp}"></label>
+    <label class="sub" style="display:block;margin-top:8px">Repite la clave nueva<input id="mcR" type="password" autocomplete="new-password" style="${inp}"></label>
+    <button style="width:100%;margin-top:12px;background:var(--navy);color:#fff;font-weight:600" onclick="guardarMiClave(${!!obligatoria})">Guardar clave</button>
+    <div class="d" id="mcMsg" style="margin-top:8px;color:var(--alta)"></div></div>`;
+  $('#sheet').className = 'sheet on' + (obligatoria ? ' fija' : '');
+}
+async function guardarMiClave(obligatoria){
+  const a = $('#mcA').value, n = $('#mcN').value, r = $('#mcR').value;
+  if (n.length < 6) return $('#mcMsg').textContent = 'La clave nueva debe tener al menos 6 caracteres.';
+  if (n !== r) return $('#mcMsg').textContent = 'Las dos claves nuevas no coinciden.';
+  const res = await fetch('/api/mi-clave', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({actual: a, nueva: n})}), j = await res.json();
+  if (!res.ok) return $('#mcMsg').textContent = j.error || 'Error';
+  if (YO) YO.debeCambiar = false;
+  $('#sheet').className = 'sheet'; alert('Listo, tu clave quedó cambiada.');
+}
+
+// ---------- Usuarios (solo gerentes) ----------
+let USR = null, usrMsg = '';
+async function openUsuarios(){
+  const r = await fetch('/api/usuarios'); USR = await r.json(); if (!r.ok) { alert(USR.error); return; }
+  sheetFn = null; pintarUsuarios(); $('#sheet').className = 'sheet on';
+}
+function pintarUsuarios(){
+  const fila = x => `<div class="li"><span><b>${esc(x.nombre)}</b> <span class="rol ${x.rol}">${x.rol}</span><div class="s">${esc(x.usuario)}${x.usuario===USR.yo?' · tú':''}</div></span>
+    <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+      <button onclick="usrClave('${esc(x.usuario)}')">Clave</button>
+      ${x.usuario===USR.yo ? '' : `<button onclick="usrAccion({accion:'editar',usuario:'${esc(x.usuario)}',rol:'${x.rol==='gerente'?'supervisor':'gerente'}'})">Hacer ${x.rol==='gerente'?'supervisor':'gerente'}</button>
+      <button style="color:var(--alta)" onclick="usrQuitar('${esc(x.usuario)}')">Quitar</button>`}</span></div>`;
+  const orden = [...USR.usuarios].sort((a,b) => (a.rol>b.rol?1:a.rol<b.rol?-1:0) || a.nombre.localeCompare(b.nombre));
+  $('#sheetBody').innerHTML = `<div class="ttl"><div><b>Usuarios</b><div class="sub">El gerente puede todo. El supervisor ve el monitor, revisa alertas y saca reportes, pero no cambia configuración, sectores, umbrales, reglas ni usuarios.</div></div></div>
+    <div class="card" style="margin-top:10px">${orden.map(fila).join('')}</div>
+    <h2>Agregar usuario</h2>
+    <div class="card"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <label class="sub">Nombre<input id="nuNombre" placeholder="María Pérez" style="${inp}"></label>
+      <label class="sub">Usuario<input id="nuUsuario" placeholder="maria" autocapitalize="none" autocomplete="off" style="${inp}"></label>
+      <label class="sub">Clave (mínimo 6)<input id="nuClave" type="text" autocomplete="off" style="${inp}"></label>
+      <label class="sub">Rol<select id="nuRol" style="${inp}"><option value="supervisor">Supervisor</option><option value="gerente">Gerente</option></select></label></div>
+      <button style="width:100%;margin-top:10px;background:var(--navy);color:#fff;font-weight:600" onclick="usrCrear()">Agregar</button>
+      <div class="sub" style="margin-top:8px">La clave que pongas es temporal: al entrar por primera vez el monitor le pide que la cambie por una propia. Pásale el usuario y la clave en persona o por un chat privado. Entra desde cualquier teléfono en admin.kinghorse.com.ve.</div></div>
+    ${usrMsg ? `<div class="d" style="margin-top:10px;color:${usrMsg.startsWith('✓')?'var(--pos)':'var(--alta)'}">${esc(usrMsg)}</div>` : ''}`;
+}
+async function usrAccion(body){
+  const r = await fetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}), j = await r.json();
+  if (!r.ok) { usrMsg = j.error || 'Error'; } else { USR = j; usrMsg = '✓ ' + ({crear:'Usuario agregado',clave:'Clave temporal puesta: al entrar tendrá que cambiarla',editar:'Rol cambiado',quitar:'Usuario quitado'})[body.accion]; }
+  pintarUsuarios(); return r.ok;
+}
+async function usrCrear(){
+  const ids = ['nuNombre','nuUsuario','nuClave','nuRol'], val = Object.fromEntries(ids.map(i => [i, $('#'+i).value]));
+  const ok = await usrAccion({accion:'crear', nombre:val.nuNombre.trim(), usuario:val.nuUsuario.trim().toLowerCase(), clave:val.nuClave, rol:val.nuRol});
+  if (!ok) ids.forEach(i => $('#'+i).value = val[i]); // si hubo error, deja lo escrito
+}
+function usrClave(u){ const c = prompt('Nueva clave para ' + u + ' (mínimo 6)'); if (c) usrAccion({accion:'clave', usuario:u, clave:c}); }
+function usrQuitar(u){ if (confirm('¿Quitarle el acceso a ' + u + '?')) usrAccion({accion:'quitar', usuario:u}); }
 
 // ---------- Taquillas ----------
 function rTaquillas(){
@@ -501,7 +566,7 @@ async function openTaq(uid){
     const g = t.ventas - t.premios; const als = D.alertas.filter(a=>a.uid===uid);
     $('#sheetBody').innerHTML = `<div class="ttl"><div><b>${esc(t.nombre)}</b><div class="sub">${t.moneda} · ${t.tickets} tickets</div></div></div>
       <div class="grid3" style="margin:12px 0"><div><div class="l">Ventas</div><div class="v">${fmt(t.ventas)}</div></div><div><div class="l">Premios</div><div class="v">${fmt(t.premios)}</div></div><div><div class="l">Ganancia</div><div class="v ${ng(g)}">${fmt(g)}</div></div></div>
-      <label class="l">Sector</label><select style="width:100%;margin-top:4px" onchange="mover('${uid}',this.value)">${sectoresList.map(s=>`<option ${s===t.sector?'selected':''}>${s}</option>`).join('')}</select>
+      <label class="l">Sector</label><select style="width:100%;margin-top:4px" ${esGerente()?'':'disabled'} onchange="mover('${uid}',this.value)">${sectoresList.map(s=>`<option ${s===t.sector?'selected':''}>${s}</option>`).join('')}</select>
       <div class="sub" style="margin-top:4px">El cambio se guarda en este monitor; no cambia nada en ondrv.</div>
       <h2>Ticket grande</h2><div class="card" id="umbralBox"><div class="sub">Cargando historial…</div></div>
       <h2>Alertas de esta taquilla (${als.length})</h2>${als.slice(0,50).map(alCard).join('') || '<div class="sub">Sin alertas.</div>'}`;
@@ -517,8 +582,8 @@ async function rUmbral(uid, fresh){
   box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline"><span class="l">Avisa desde</span><b style="font-size:20px">${fmt(u.monto)}</b></div>
     <div class="sub" style="margin-top:2px">${f}</div>
     ${u.tickets ? `<div class="grid3" style="margin-top:10px"><div><div class="l">Ticket típico</div><div class="v">${fmt(u.mediana)}</div></div><div><div class="l">95% de sus tickets</div><div class="v">≤ ${fmt(u.p95)}</div></div><div><div class="l">Récord</div><div class="v">${fmt(u.record)}</div></div></div>` : ''}
-    <label class="l" style="display:block;margin-top:10px">Fijar umbral a mano (vacío = automático)</label>
-    <div style="display:flex;gap:8px;margin-top:4px"><input id="umbralIn" type="number" inputmode="decimal" value="${u.manual||''}" placeholder="automático" style="flex:1"><button onclick="fijarUmbral('${uid}')">Guardar</button></div>`;
+    <label class="l solo-gerente" style="display:block;margin-top:10px">Fijar umbral a mano (vacío = automático)</label>
+    <div class="solo-gerente" style="display:flex;gap:8px;margin-top:4px"><input id="umbralIn" type="number" inputmode="decimal" value="${u.manual||''}" placeholder="automático" style="flex:1"><button onclick="fijarUmbral('${uid}')">Guardar</button></div>`;
 }
 async function fijarUmbral(uid){
   const v = $('#umbralIn').value;

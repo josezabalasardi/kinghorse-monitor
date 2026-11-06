@@ -54,11 +54,16 @@ Baja lo nuevo, reinstala y reinicia el servicio. Conserva usuarios, claves (`/et
 
 ## Usuarios y acceso
 
+Hay dos roles. El **gerente** puede todo: configurar alertas, mover taquillas de sector, fijar umbrales, aprobar sugerencias de la IA y manejar usuarios. El **supervisor** ve el monitor completo, marca alertas como revisadas y saca reportes, pero no cambia nada de lo anterior.
+
+Un gerente agrega usuarios desde el monitor: Alertas → Configurar → Usuarios → Administrar. La clave que pone es temporal: la primera vez que esa persona entra, el monitor le pide cambiarla por una propia. Desde ahí cualquiera cambia su clave en Configurar → Cambiar mi clave. Si alguien la olvida, el gerente le pone una temporal nueva con el botón Clave. Siempre queda al menos un gerente. Los usuarios que existían antes de los roles son gerentes.
+
 El monitor pide usuario y clave. La sesión dura 30 días en el teléfono. Después de 8 intentos fallidos desde la misma conexión se bloquea por 15 minutos. Cambiar la clave de alguien cierra sus sesiones abiertas. Cuando un gerente marca una alerta como revisada o aprueba una sugerencia de la IA, queda registrado con su nombre.
 
 ```
 cd /opt/monitor-kh/app
-sudo -u monitorkh ../node/bin/node server.js --usuario maria clave123 María Pérez   # crear o cambiar clave
+sudo -u monitorkh ../node/bin/node server.js --usuario maria clave123 María Pérez   # crear o cambiar clave (gerente)
+sudo -u monitorkh ../node/bin/node server.js --usuario ana clave123 Ana --supervisor  # supervisor
 sudo -u monitorkh ../node/bin/node server.js --quitar-usuario maria
 sudo -u monitorkh ../node/bin/node server.js --usuarios                              # listar
 ```

@@ -20,16 +20,36 @@ if (!SECRET) {
 const hash = (clave, salt) => crypto.scryptSync(clave, salt, 64).toString('hex');
 const normal = u => String(u || '').trim().toLowerCase();
 
-function crear(usuario, clave, nombre) {
+// Roles: gerente (todo, incluido manejar usuarios y configuración) y supervisor (ve, revisa alertas y saca reportes).
+// Los usuarios creados antes de que existieran los roles son gerentes.
+const ROLES = ['gerente', 'supervisor'];
+const rolDe = x => ROLES.includes(x?.rol) ? x.rol : 'gerente';
+// temporal = true cuando la clave la puso un gerente: el usuario tiene que cambiarla al entrar
+function crear(usuario, clave, nombre, rol, temporal = false) {
   usuario = normal(usuario);
   if (!/^[a-z0-9._-]{2,30}$/.test(usuario)) throw new Error('Usuario inválido: usa letras, números, punto o guion');
   if (!clave || clave.length < 6) throw new Error('La clave debe tener al menos 6 caracteres');
-  const salt = crypto.randomBytes(16).toString('hex');
-  USERS[usuario] = { nombre: nombre || usuario, salt, hash: hash(clave, salt), creado: USERS[usuario]?.creado || Date.now(), version: (USERS[usuario]?.version || 0) + 1 };
+  if (rol && !ROLES.includes(rol)) throw new Error('Rol inválido');
+  const salt = crypto.randomBytes(16).toString('hex'), antes = USERS[usuario];
+  USERS[usuario] = { nombre: String(nombre || antes?.nombre || usuario).slice(0, 60), rol: rol || rolDe(antes), salt, hash: hash(clave, salt), creado: antes?.creado || Date.now(), version: (antes?.version || 0) + 1, ...(temporal ? { debeCambiar: true } : {}) };
   saveUsers();
 }
-function quitar(usuario) { delete USERS[normal(usuario)]; saveUsers(); }
-const lista = () => Object.entries(USERS).map(([u, x]) => ({ usuario: u, nombre: x.nombre }));
+// cambia nombre o rol sin tocar la clave; cambiar el rol cierra sus sesiones para que entre con el permiso nuevo
+function editar(usuario, { nombre, rol }) {
+  const x = USERS[normal(usuario)]; if (!x) throw new Error('No existe ese usuario');
+  if (rol && !ROLES.includes(rol)) throw new Error('Rol inválido');
+  if (rol && rol !== 'gerente' && rolDe(x) === 'gerente' && gerentes() <= 1) throw new Error('Tiene que quedar al menos un gerente');
+  if (nombre) x.nombre = String(nombre).slice(0, 60);
+  if (rol && rol !== rolDe(x)) { x.rol = rol; x.version++; }
+  saveUsers();
+}
+const gerentes = () => Object.values(USERS).filter(x => rolDe(x) === 'gerente').length;
+function quitar(usuario) {
+  const x = USERS[normal(usuario)]; if (!x) return;
+  if (rolDe(x) === 'gerente' && gerentes() <= 1) throw new Error('Tiene que quedar al menos un gerente');
+  delete USERS[normal(usuario)]; saveUsers();
+}
+const lista = () => Object.entries(USERS).map(([u, x]) => ({ usuario: u, nombre: x.nombre, rol: rolDe(x), creado: x.creado }));
 const hayUsuarios = () => Object.keys(USERS).length > 0;
 
 function verificar(usuario, clave) {
@@ -48,7 +68,7 @@ function leer(req) {
   if (f.length !== p[3].length || !crypto.timingSafeEqual(Buffer.from(f), Buffer.from(p[3]))) return null;
   const [usuario, version, exp] = p; const x = USERS[usuario];
   if (!x || String(x.version) !== version || +exp < Date.now()) return null;
-  return { usuario, nombre: x.nombre };
+  return { usuario, nombre: x.nombre, rol: rolDe(x), debeCambiar: !!x.debeCambiar };
 }
 function cookie(req, valor, maxAge) {
   const segura = req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted;
@@ -60,4 +80,4 @@ const FALLOS = new Map();
 function bloqueado(ip) { const f = FALLOS.get(ip); return f && f.n >= 8 && Date.now() - f.t < 15 * 60e3; }
 function fallo(ip) { const f = FALLOS.get(ip) || { n: 0, t: 0 }; if (Date.now() - f.t > 15 * 60e3) f.n = 0; f.n++; f.t = Date.now(); FALLOS.set(ip, f); }
 
-module.exports = { crear, quitar, lista, hayUsuarios, verificar, token, leer, cookie, bloqueado, fallo, DIAS, ok: ip => FALLOS.delete(ip) };
+module.exports = { ROLES, crear, editar, quitar, lista, hayUsuarios, verificar, token, leer, cookie, bloqueado, fallo, DIAS, ok: ip => FALLOS.delete(ip) };
